@@ -57,7 +57,7 @@ class AuditEvent:
     All fields are either identifiers, numeric values, or controlled enums.
     No free-text content is allowed.
     """
-    event_type: Literal["query", "upload", "delete", "refusal", "error"]
+    event_type: Literal["query", "upload", "delete", "refusal", "error", "auth"]
     request_id: str
     timestamp: str
     session_id: str = ""
@@ -216,16 +216,37 @@ def log_error(
     _get_audit_logger().info(event.to_json())
 
 
+def log_auth(
+    request_id: str,
+    session_id: str,
+    action: Literal["login_success", "login_failed", "logout"],
+    username: str = "",
+) -> None:
+    """
+    Log authentication event.
+
+    Note: We log action type, not user details (privacy).
+    """
+    event = AuditEvent(
+        event_type="auth",
+        request_id=request_id,
+        timestamp=utcnow_iso(),
+        session_id=session_id,
+        error_code=action,  # Reuse field for action type
+    )
+    _get_audit_logger().info(event.to_json())
+
+
 class RequestTimer:
     """Context manager for timing requests."""
-    
+
     def __init__(self):
         self.start_time: float = 0
         self.elapsed_ms: int = 0
-    
+
     def __enter__(self) -> "RequestTimer":
         self.start_time = time.perf_counter()
         return self
-    
+
     def __exit__(self, *args) -> None:
         self.elapsed_ms = int((time.perf_counter() - self.start_time) * 1000)

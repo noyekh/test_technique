@@ -26,6 +26,7 @@ from backend.rag import (
     answer_question_buffered,
     refusal,
 )
+from backend.auth import render_logout, require_auth
 from backend.rate_limit import check_rate_limit
 from backend.settings import settings
 
@@ -36,6 +37,7 @@ db.init_db()
 logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="Chatbot", page_icon="💬", layout="wide")
+username = require_auth()  # Bloque si non authentifié
 st.title("💬 Chatbot interne (RAG strict)")
 
 if not os.getenv("OPENAI_API_KEY"):
@@ -83,14 +85,17 @@ with st.sidebar:
             st.rerun()
 
     st.divider()
-    
+
+    render_logout()
+    st.caption(f"Connecté: {username}")
+
     # Security notice
     st.info(
         "🔒 **Mode sécurisé (v1.5)**\n\n"
         "Les réponses sont validées avant affichage. "
         "Le streaming est désactivé pour garantir la conformité."
     )
-    
+
     st.caption(
         f"Rate limit: {settings.rate_limit_max_requests}/{settings.rate_limit_window_seconds}s"
     )

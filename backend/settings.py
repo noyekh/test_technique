@@ -169,5 +169,8 @@ class Settings:
     # Answer length limit (anti-exfiltration)
     max_answer_chars: int = _env_int("MAX_ANSWER_CHARS", 4000)
 
+    # Authentication (v1.8)
+    auth_enabled: bool = _env_bool("AUTH_ENABLED", True)
+
 
 settings = Settings()

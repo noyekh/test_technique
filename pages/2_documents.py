@@ -21,6 +21,7 @@ from backend.files import save_upload
 from backend.ingest import read_to_text
 from backend.logging_config import setup_logging
 from backend.mime_validation import validate_mime
+from backend.auth import render_logout, require_auth
 from backend.rag import add_doc_chunks, chunk_text
 from backend.settings import settings
 
@@ -31,7 +32,12 @@ db.init_db()
 logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="Documents", page_icon="📄", layout="wide")
+username = require_auth()  # Bloque si non authentifié
 st.title("📄 Gestion des documents")
+
+with st.sidebar:
+    render_logout()
+    st.caption(f"Connecté: {username}")
 
 if not os.getenv("OPENAI_API_KEY"):
     st.warning("OPENAI_API_KEY manquant : l'indexation (embeddings) échouera.")
