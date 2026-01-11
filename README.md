@@ -24,7 +24,7 @@ cp secrets.example.toml .streamlit/secrets.toml
 streamlit run main.py
 ```
 
-**Connexion** : `admin` / `admin123` ou `avocat1` / `avocat123`
+**Connexion** : `admin` / `admin123`
 
 **Workflow** : Documents → uploader fichiers → Chatbot → poser questions
 
@@ -167,12 +167,11 @@ cp secrets.example.toml .streamlit/secrets.toml
 
 ## Configuration authentification
 
-### Utilisateurs par défaut (test)
+### Utilisateur par défaut (test)
 
 | Username | Password | Nom affiché |
 |----------|----------|-------------|
 | `admin` | `admin123` | Emilia Parenti |
-| `avocat1` | `avocat123` | Avocat Junior |
 
 ### Ajouter un utilisateur
 
