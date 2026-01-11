@@ -8,16 +8,14 @@ Tests cover:
 - Error handling and fallbacks
 """
 
-import pytest
 from dataclasses import dataclass
 from typing import Any
 
 from backend.multi_query import (
-    generate_query_variants,
     deduplicate_documents,
     expand_and_retrieve,
+    generate_query_variants,
 )
-
 
 # ============================================================================
 # TEST FIXTURES
@@ -330,7 +328,7 @@ def test_expand_and_retrieve_combines_results():
         query_count += 1
         return [(FakeDoc(page_content=f"Doc {query_count}", metadata={}), 0.9 - query_count * 0.1)]
 
-    result = expand_and_retrieve(
+    expand_and_retrieve(
         question="Test",
         retriever_fn=tracking_retriever,
         llm_expand_fn=fake_llm_expand,  # Returns 3 variants

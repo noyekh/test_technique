@@ -12,10 +12,8 @@ from unittest.mock import patch
 from backend.mime_validation import (
     ALLOWED_EXTS,
     ALLOWED_MIME_BY_EXT,
-    detect_mime,
     validate_mime,
 )
-
 
 # ============================================================================
 # EXTENSION WHITELIST TESTS
@@ -57,8 +55,8 @@ def test_validate_mime_rejects_empty_extension():
 def test_detect_mime_returns_none_when_import_fails():
     """Test that detect_mime returns None when magic import fails."""
     # Mock the import to raise ImportError
-    import sys
     import importlib
+    import sys
 
     # Save original magic module if it exists
     original_magic = sys.modules.get("magic")

@@ -106,10 +106,10 @@ def _env_int(name: str, default: int) -> int:
 class Settings:
     """
     Application settings.
-    
+
     All settings can be overridden via environment variables.
     See .env.example for a complete list.
-    
+
     Attributes:
         openai_chat_model: LLM model for chat completion (v1.7: gpt-4.1-mini)
         voyage_embed_model: Voyage AI model for embeddings (v1.7)
@@ -130,11 +130,11 @@ class Settings:
         max_question_len: Maximum question length in characters
         max_answer_chars: Maximum answer length (anti-exfiltration)
     """
-    
+
     # LLM (v1.7: GPT-4.1-mini with 1M context)
     # +17% improvement on legal cross-referencing (Thomson Reuters)
     openai_chat_model: str = os.getenv("OPENAI_CHAT_MODEL", "gpt-4.1-mini")
-    
+
     # Embeddings (v1.7: Voyage AI)
     # voyage-3-large surpasses voyage-law-2 on legal benchmarks (Voyage AI, Jan 2025)
     # 200M tokens FREE, then $0.05/M - 32K context window
@@ -158,7 +158,7 @@ class Settings:
     chunk_size_tokens: int = _env_int("CHUNK_SIZE_TOKENS", 768)
     # ~15% overlap preserves context (115/768 ≈ 15%)
     chunk_overlap_tokens: int = _env_int("CHUNK_OVERLAP_TOKENS", 115)
-    
+
     # Hybrid search
     # BM25+Dense combination based on Anthropic Contextual Retrieval (-49% failures)
     hybrid_search: bool = _env_bool("HYBRID_SEARCH", True)
@@ -179,7 +179,7 @@ class Settings:
 
     # Question length limit
     max_question_len: int = _env_int("MAX_QUESTION_LEN", 2000)
-    
+
     # Answer length limit (anti-exfiltration)
     max_answer_chars: int = _env_int("MAX_ANSWER_CHARS", 4000)
 

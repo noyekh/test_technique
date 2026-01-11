@@ -7,18 +7,16 @@ Tests cover:
 - Result ordering and metadata
 """
 
-import pytest
 from dataclasses import dataclass
 from typing import Any
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from backend.reranker import (
     RerankResult,
+    _get_voyage_client,
     rerank_documents,
     rerank_with_metadata,
-    _get_voyage_client,
 )
-
 
 # ============================================================================
 # TEST FIXTURES
@@ -72,8 +70,7 @@ def test_get_voyage_client_import_error():
     with patch.dict("sys.modules", {"voyageai": None}):
         with patch("backend.reranker.os.getenv", return_value="fake-key"):
             # Force reimport behavior
-            import importlib
-            import backend.reranker
+            pass
             # The function should handle ImportError gracefully
             # This is tested implicitly through the fallback tests below
 

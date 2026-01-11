@@ -13,16 +13,13 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from backend.files import (
-    sha256_bytes,
-    safe_filename,
-    infer_ext,
     build_stored_path,
+    infer_ext,
+    safe_filename,
     save_upload,
+    sha256_bytes,
 )
-
 
 # ============================================================================
 # SHA256 HASHING TESTS

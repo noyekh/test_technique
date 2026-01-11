@@ -22,7 +22,8 @@ from __future__ import annotations
 
 import time
 from collections import deque
-from typing import Any, Deque, MutableMapping
+from collections.abc import MutableMapping
+from typing import Any
 
 
 def check_rate_limit(
@@ -39,10 +40,10 @@ def check_rate_limit(
         key: Unique key for this rate limit bucket
         max_requests: Maximum requests allowed in window
         window_seconds: Window duration in seconds
-        
+
     Returns:
         Tuple of (allowed, retry_after_seconds)
-        
+
     Usage:
         allowed, retry = check_rate_limit(st.session_state, "chat", 20, 60)
         if not allowed:
@@ -53,7 +54,7 @@ def check_rate_limit(
         return False, max(1, window_seconds)
 
     now = time.time()
-    dq: Deque[float] | None = session_state.get(key)
+    dq: deque[float] | None = session_state.get(key)
     if dq is None:
         dq = deque()
         session_state[key] = dq

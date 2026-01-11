@@ -68,7 +68,7 @@ def require_auth() -> str:
     # Check authentication status from session_state (set by authenticator)
     status = st.session_state.get("authentication_status")
     username = st.session_state.get("username")
-    name = st.session_state.get("name")
+    st.session_state.get("name")
 
     session_id = st.session_state.get("session_id", "unknown")
     request_id = generate_request_id()

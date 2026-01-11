@@ -26,10 +26,10 @@ SAFE_NAME = re.compile(r"[^a-zA-Z0-9._-]+")
 def sha256_bytes(b: bytes) -> str:
     """
     Compute SHA256 hash of bytes.
-    
+
     Args:
         b: Raw bytes to hash
-        
+
     Returns:
         Hex-encoded hash string
     """
@@ -39,10 +39,10 @@ def sha256_bytes(b: bytes) -> str:
 def safe_filename(name: str) -> str:
     """
     Sanitize filename to prevent path traversal and special chars.
-    
+
     Args:
         name: Original filename
-        
+
     Returns:
         Sanitized filename (max 200 chars)
     """
@@ -54,10 +54,10 @@ def safe_filename(name: str) -> str:
 def infer_ext(filename: str) -> str:
     """
     Extract file extension from filename.
-    
+
     Args:
         filename: Original filename
-        
+
     Returns:
         Lowercase extension without dot, or "txt" as default
     """
@@ -68,11 +68,11 @@ def infer_ext(filename: str) -> str:
 def build_stored_path(digest: str, original_name: str) -> Path:
     """
     Build content-addressed storage path.
-    
+
     Args:
         digest: SHA256 hash of content
         original_name: Original filename
-        
+
     Returns:
         Path in format: uploads/{hash}_{sanitized_name}
     """
@@ -83,11 +83,11 @@ def build_stored_path(digest: str, original_name: str) -> Path:
 def save_upload(original_name: str, raw: bytes) -> tuple[str, Path, str, int]:
     """
     Save an uploaded file to disk with content-addressed naming.
-    
+
     Args:
         original_name: Original filename as uploaded
         raw: File content as bytes
-        
+
     Returns:
         Tuple of (sha256, stored_path, extension, size_bytes)
     """

@@ -191,7 +191,7 @@ def test_large_max_requests():
     """Test with a large max_requests value."""
     session = {}
 
-    for i in range(100):
+    for _i in range(100):
         allowed, _ = check_rate_limit(
             session, key="test", max_requests=1000, window_seconds=60
         )

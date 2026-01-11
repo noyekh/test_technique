@@ -73,12 +73,13 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Iterator
+from collections.abc import Iterator
 
 import streamlit as st
 from langchain_chroma import Chroma
 from langchain_community.retrievers import BM25Retriever
 from langchain_core.documents import Document
+from langchain_core.messages import AIMessage, HumanMessage
 
 # EnsembleRetriever location varies by LangChain version
 try:
@@ -93,17 +94,17 @@ except ImportError:
             # langchain >= 1.0 uses langchain-classic for legacy components
             from langchain_classic.retrievers import EnsembleRetriever
 from langchain_core.output_parsers import PydanticOutputParser
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI
-from langchain_voyageai import VoyageAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_voyageai import VoyageAIEmbeddings
 from pydantic import BaseModel, Field
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from .multi_query import expand_and_retrieve
 from .rag_core import RagConfig
-from .settings import CHROMA_DIR, settings
 from .reranker import rerank_documents
-from .multi_query import expand_and_retrieve, generate_query_variants
+from .settings import CHROMA_DIR, settings
 
 logger = logging.getLogger(__name__)
 
@@ -236,7 +237,7 @@ def _rebuild_bm25_index() -> None:
                     page_content=doc,
                     metadata=meta if meta else {}
                 )
-                for doc, meta in zip(result["documents"], result.get("metadatas", [{}] * len(result["documents"])))
+                for doc, meta in zip(result["documents"], result.get("metadatas", [{}] * len(result["documents"])), strict=False)
             ]
             logger.debug(f"BM25 index rebuilt with {len(_bm25_docs)} documents")
         else:
@@ -266,7 +267,7 @@ def _base_retriever_fn(question: str, k: int) -> list[tuple[Document, float]]:
         # Fallback to dense-only (v1.5 behavior)
         try:
             return vectorstore().similarity_search_with_relevance_scores(question, k=k)
-        except Exception as e:
+        except Exception:
             logger.exception("Retrieval failed", extra={"error_code": "RETRIEVAL_ERROR"})
             return []
 
@@ -316,7 +317,7 @@ def _base_retriever_fn(question: str, k: int) -> list[tuple[Document, float]]:
 
         return []
 
-    except Exception as e:
+    except Exception:
         logger.exception("Hybrid retrieval failed", extra={"error_code": "HYBRID_RETRIEVAL_ERROR"})
         # Fallback to dense-only on error
         try:
@@ -358,9 +359,6 @@ def _llm_expand_fn(prompt: str) -> list[str]:
 # QUERY CONTEXTUALIZATION (v1.11 - Conversational RAG)
 # ============================================================================
 
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.messages import HumanMessage, AIMessage
-
 
 def contextualize_query(
     question: str,
@@ -378,7 +376,6 @@ def contextualize_query(
     Returns:
         Standalone question suitable for retrieval
     """
-    import streamlit as st  # For debug output
 
     # Skip if no history
     if not history:
@@ -537,21 +534,21 @@ def chunk_text(text: str) -> list[str]:
     Split text into chunks for vectorization.
 
     v1.6: Token-aware chunking with French legal separators.
-    
+
     Key improvements over v1.5:
     - Measures in TOKENS (not characters) for precise embedding alignment
     - Uses tiktoken cl100k_base encoder (GPT-4/text-embedding-3 compatible)
     - Legal-specific separators preserve Article/Alinéa boundaries
     - 768 tokens optimal for French legal text (Chroma Research 2024)
-    
+
     Why token-aware matters:
     - Character-based chunking can exceed embedding model limits
     - French legal text uses ~20-25% more tokens than English
     - Precise token counts enable accurate cost prediction
-    
+
     Args:
         text: Input text to chunk
-        
+
     Returns:
         List of text chunks
     """
@@ -579,7 +576,7 @@ def add_doc_chunks(doc_id: str, original_name: str, chunks: list[str]) -> list[s
         List of chunk IDs
     """
     global _bm25_docs
-    
+
     vs = vectorstore()
     chunk_ids: list[str] = []
     docs: list[Document] = []
@@ -595,10 +592,10 @@ def add_doc_chunks(doc_id: str, original_name: str, chunks: list[str]) -> list[s
         )
 
     vs.add_documents(documents=docs, ids=chunk_ids)
-    
+
     # Rebuild BM25 index with new documents
     _rebuild_bm25_index()
-    
+
     logger.info("Indexed document", extra={"doc_id": doc_id, "chunks": len(chunk_ids)})
     return chunk_ids
 
@@ -654,7 +651,7 @@ def llm_invoke_structured(messages: list[dict[str, str]]) -> tuple[str, list[int
     )
 
     # Call LLM directly (avoid ChatPromptTemplate issues with braces)
-    from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+    from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
     # Build LLM messages with full history support
     # messages structure: [system, ...history..., current_user_with_sources]
@@ -710,7 +707,7 @@ def llm_stream_tokens(messages: list[dict[str, str]]) -> Iterator[str]:
     Stream LLM response tokens.
 
     This is the concrete implementation of LLMStreamFn.
-    
+
     WARNING (v1.5): Streaming is deprecated for legal contexts.
     Use llm_invoke_structured() instead.
 

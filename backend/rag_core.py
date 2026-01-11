@@ -28,8 +28,9 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from typing import Any, Callable, Iterator, Protocol
+from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
 
@@ -199,11 +200,11 @@ def postprocess_micro_quotes(answer_text: str, max_quote_words: int = 20) -> str
 def truncate_answer(answer_text: str, max_chars: int) -> str:
     """
     Truncate answer to prevent exfiltration via overly long responses.
-    
+
     Args:
         answer_text: The generated answer
         max_chars: Maximum characters allowed
-        
+
     Returns:
         Truncated answer with ellipsis if needed
     """
@@ -424,7 +425,7 @@ def answer_question(
 
     try:
         answer_text, citations = llm_invoke_structured(messages)
-    except Exception as e:
+    except Exception:
         logger.exception("LLM structured call failed", extra={"error_code": "LLM_ERROR"})
         return refusal(), sources_meta
 
@@ -523,7 +524,7 @@ def answer_question_buffered(
 
     try:
         answer_text, citations = llm_invoke_structured(messages)
-    except Exception as e:
+    except Exception:
         logger.exception("LLM structured call failed", extra={"error_code": "LLM_ERROR"})
         return refusal(), sources_meta, doc_ids, chunk_ids
 
@@ -621,9 +622,8 @@ def stream_answer(
 
     def _iter() -> Iterator[str]:
         try:
-            for tok in llm_stream(messages):
-                yield tok
-        except Exception as e:
+            yield from llm_stream(messages)
+        except Exception:
             logger.exception("Streaming failed", extra={"error_code": "STREAM_ERROR"})
             return
 

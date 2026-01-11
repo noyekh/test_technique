@@ -26,15 +26,16 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Iterable, Optional
+from collections.abc import Iterable
+from datetime import UTC, datetime
+from typing import Any
 
 from .settings import SQLITE_PATH
 
 
 def _utcnow() -> str:
     """Get current UTC timestamp in ISO format."""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _id() -> str:
@@ -45,7 +46,7 @@ def _id() -> str:
 def connect() -> sqlite3.Connection:
     """
     Create a database connection with proper configuration.
-    
+
     Configuration:
     - check_same_thread=False: Allows use from Streamlit's threading model
     - row_factory=sqlite3.Row: Dict-like access to query results
@@ -61,7 +62,7 @@ def connect() -> sqlite3.Connection:
 def init_db() -> None:
     """
     Initialize database schema.
-    
+
     Idempotent: safe to call multiple times.
     Creates tables and indexes if they don't exist.
     """
@@ -116,7 +117,7 @@ def init_db() -> None:
     );
     """
     )
-    
+
     # Deletion tombstones for GDPR audit trail
     cur.execute(
         """
@@ -163,14 +164,14 @@ def add_document(
 ) -> str:
     """
     Add a new document to the database.
-    
+
     Args:
         original_name: Original filename as uploaded
         stored_path: Path where file is stored on disk
         ext: File extension (without dot)
         sha256: Content hash for deduplication
         size_bytes: File size in bytes
-        
+
     Returns:
         Generated document ID
     """
@@ -228,7 +229,7 @@ def add_document_with_id(
 def list_documents():
     """
     List all documents, most recent first.
-    
+
     Returns:
         List of document Row objects
     """
@@ -241,10 +242,10 @@ def list_documents():
 def get_document(doc_id: str):
     """
     Get a single document by ID.
-    
+
     Args:
         doc_id: Document identifier
-        
+
     Returns:
         Document Row or None if not found
     """
@@ -257,12 +258,12 @@ def get_document(doc_id: str):
 def get_document_by_sha256(sha256: str):
     """
     Find a document by content hash.
-    
+
     Used for deduplication on upload.
-    
+
     Args:
         sha256: Content hash to search for
-        
+
     Returns:
         Document Row or None if not found
     """
@@ -275,10 +276,10 @@ def get_document_by_sha256(sha256: str):
 def add_chunks(doc_id: str, chunk_ids: Iterable[str]) -> None:
     """
     Record chunk IDs for a document.
-    
+
     This creates the mapping between doc_id and the chunk IDs
     stored in the vectorstore, enabling proper cleanup on deletion.
-    
+
     Args:
         doc_id: Parent document ID
         chunk_ids: Iterable of chunk IDs as stored in vectorstore
@@ -295,12 +296,12 @@ def add_chunks(doc_id: str, chunk_ids: Iterable[str]) -> None:
 def get_chunk_ids(doc_id: str) -> list[str]:
     """
     Get all chunk IDs for a document.
-    
+
     Used during deletion to remove chunks from vectorstore.
-    
+
     Args:
         doc_id: Document identifier
-        
+
     Returns:
         List of chunk IDs in order
     """
@@ -315,12 +316,12 @@ def get_chunk_ids(doc_id: str) -> list[str]:
 def delete_document_rows(doc_id: str) -> None:
     """
     Delete document from database.
-    
+
     Note: This only removes the database record. For complete deletion
     including vectorstore and filesystem, use documents.delete_document_complete().
-    
+
     CASCADE delete will automatically remove associated chunks.
-    
+
     Args:
         doc_id: Document identifier to delete
     """
@@ -335,15 +336,15 @@ def delete_document_rows(doc_id: str) -> None:
 def add_deletion_tombstone(doc_id: str, sha256: str, chunk_count: int) -> str:
     """
     Add a tombstone record for a deleted document.
-    
+
     This creates an audit trail for GDPR compliance, recording that
     a document was deleted without storing its content.
-    
+
     Args:
         doc_id: The deleted document's ID
         sha256: Content hash of the deleted document
         chunk_count: Number of chunks that were deleted
-        
+
     Returns:
         Generated deletion ID
     """
@@ -364,10 +365,10 @@ def add_deletion_tombstone(doc_id: str, sha256: str, chunk_count: int) -> str:
 def get_deletion_tombstone(doc_id: str):
     """
     Get deletion tombstone for a document.
-    
+
     Args:
         doc_id: Document identifier
-        
+
     Returns:
         Deletion Row or None if no tombstone exists
     """
@@ -383,10 +384,10 @@ def get_deletion_tombstone(doc_id: str):
 def list_deletions(limit: int = 100):
     """
     List recent deletion tombstones.
-    
+
     Args:
         limit: Maximum number of records to return
-        
+
     Returns:
         List of deletion Row objects
     """
@@ -430,7 +431,7 @@ def ensure_default_conversation() -> str:
     return conv_id
 
 
-def new_conversation(title: Optional[str] = None) -> str:
+def new_conversation(title: str | None = None) -> str:
     """
     Create a new conversation.
 
@@ -470,7 +471,7 @@ def add_message(
     conv_id: str,
     role: str,
     content: str,
-    sources: Optional[list[dict[str, Any]]] = None,
+    sources: list[dict[str, Any]] | None = None,
 ) -> None:
     """
     Add a message to a conversation.
@@ -597,7 +598,7 @@ def delete_conversation(conv_id: str) -> bool:
     return deleted
 
 
-def delete_last_assistant_message(conv_id: str) -> Optional[str]:
+def delete_last_assistant_message(conv_id: str) -> str | None:
     """
     Delete the last assistant message in a conversation.
 
@@ -632,7 +633,7 @@ def delete_last_assistant_message(conv_id: str) -> Optional[str]:
     return msg_id
 
 
-def get_last_user_message(conv_id: str) -> Optional[str]:
+def get_last_user_message(conv_id: str) -> str | None:
     """
     Get the last user message content in a conversation.
 

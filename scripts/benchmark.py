@@ -38,9 +38,9 @@ if not os.getenv("OPENAI_API_KEY") or not os.getenv("VOYAGE_API_KEY"):
     print("   Set them in .env file")
     sys.exit(1)
 
-from backend import db
-from backend.rag import answer_question_buffered, refusal
-from backend.logging_config import setup_logging
+from backend import db  # noqa: E402
+from backend.logging_config import setup_logging  # noqa: E402
+from backend.rag import answer_question_buffered, refusal  # noqa: E402
 
 setup_logging()
 db.init_db()
@@ -82,7 +82,7 @@ def run_benchmark(queries: list[str], num_runs: int = 3) -> dict:
     for i, query in enumerate(queries, 1):
         query_latencies = []
 
-        for run in range(num_runs):
+        for _run in range(num_runs):
             start = time.perf_counter()
 
             try:

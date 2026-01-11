@@ -53,14 +53,14 @@ _FORBIDDEN = [
 def sanitize_question(q: str, max_len: int = 2000) -> str:
     """
     Sanitize user input for basic prompt injection protection.
-    
+
     This is NOT a complete defense - see rag_core.py for the
     hardened system prompt that treats all sources as untrusted.
-    
+
     Args:
         q: User's question
         max_len: Maximum allowed length
-        
+
     Returns:
         Sanitized question, or empty string if injection detected
     """

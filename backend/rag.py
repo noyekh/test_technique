@@ -20,26 +20,32 @@ v1.9 Changes:
 
 from __future__ import annotations
 
-from typing import Any, Iterator
+from collections.abc import Iterator
+from typing import Any
 
+from .citation_verifier import verify_answer
 from .rag_core import (
     answer_question as core_answer,
+)
+from .rag_core import (
     answer_question_buffered as core_answer_buffered,
-    stream_answer as core_stream,
-    validate_inline_citations,
-    postprocess_micro_quotes,
+)
+from .rag_core import (
     refusal,
+    validate_inline_citations,
+)
+from .rag_core import (
+    stream_answer as core_stream,
 )
 from .rag_runtime import (
-    make_config,
-    retriever_fn,
+    add_doc_chunks,
+    chunk_text,
     llm_invoke_structured,
     llm_stream_tokens,
+    make_config,
+    retriever_fn,
     vectorstore,
-    chunk_text,
-    add_doc_chunks,
 )
-from .citation_verifier import verify_answer
 from .security import sanitize_question
 from .settings import settings
 

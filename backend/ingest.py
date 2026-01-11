@@ -22,6 +22,7 @@ For production, consider:
 from __future__ import annotations
 
 import html
+
 import pandas as pd
 from bs4 import BeautifulSoup
 
@@ -29,10 +30,10 @@ from bs4 import BeautifulSoup
 def normalize_text(s: str) -> str:
     """
     Normalize text: CRLF -> LF, strip trailing whitespace, trim.
-    
+
     Args:
         s: Raw text string
-        
+
     Returns:
         Normalized text
     """
@@ -45,14 +46,14 @@ def normalize_text(s: str) -> str:
 def read_to_text(ext: str, raw: bytes) -> str:
     """
     Convert raw file bytes to normalized text based on extension.
-    
+
     Args:
         ext: File extension (without dot)
         raw: File content as bytes
-        
+
     Returns:
         Extracted and normalized text
-        
+
     Raises:
         ValueError: If extension is not supported
     """

@@ -22,13 +22,13 @@ from backend.audit_log import (
     log_error,
     log_query,
 )
+from backend.auth import render_logout, require_auth
 from backend.logging_config import setup_logging
 from backend.rag import (
     answer_question_buffered,
     refusal,
 )
 from backend.rag_runtime import contextualize_query
-from backend.auth import render_logout, require_auth
 from backend.rate_limit import check_rate_limit
 from backend.settings import settings
 
@@ -205,7 +205,7 @@ if regen_prompt:
 
 if prompt:
     request_id = generate_request_id()
-    
+
     # Rate limiting
     allowed, retry_after = check_rate_limit(
         st.session_state,
@@ -253,8 +253,8 @@ if prompt:
                         history=history,
                     )
                     is_refusal = answer == refusal()
-                    
-                except Exception as e:
+
+                except Exception:
                     logger.exception(
                         "Query failed",
                         extra={"request_id": request_id, "error_code": "QUERY_ERROR"},

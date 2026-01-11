@@ -38,10 +38,9 @@ import json
 import logging
 import time
 import uuid
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
+from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
-from pathlib import Path
 from typing import Literal
 
 from .settings import DATA_DIR
@@ -53,7 +52,7 @@ AUDIT_LOG_PATH = DATA_DIR / "audit.jsonl"
 class AuditEvent:
     """
     Structured audit event with allowlist-only fields.
-    
+
     All fields are either identifiers, numeric values, or controlled enums.
     No free-text content is allowed.
     """
@@ -70,7 +69,7 @@ class AuditEvent:
     input_tokens: int = 0
     output_tokens: int = 0
     error_code: str = ""
-    
+
     def to_json(self) -> str:
         """Serialize to JSON line."""
         return json.dumps(asdict(self), ensure_ascii=False)
@@ -79,21 +78,21 @@ class AuditEvent:
 def _get_audit_logger() -> logging.Logger:
     """
     Get or create the audit logger with file rotation.
-    
+
     Separate from application logging to ensure audit events
     are captured even if app logging fails.
     """
     logger = logging.getLogger("audit")
-    
+
     if logger.handlers:
         return logger
-    
+
     logger.setLevel(logging.INFO)
     logger.propagate = False  # Don't send to root logger
-    
+
     # Ensure directory exists
     AUDIT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # Rotating file handler: 10MB max, keep 5 backups
     handler = RotatingFileHandler(
         AUDIT_LOG_PATH,
@@ -103,7 +102,7 @@ def _get_audit_logger() -> logging.Logger:
     )
     handler.setFormatter(logging.Formatter("%(message)s"))
     logger.addHandler(handler)
-    
+
     return logger
 
 
@@ -114,7 +113,7 @@ def generate_request_id() -> str:
 
 def utcnow_iso() -> str:
     """Get current UTC timestamp in ISO format."""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def log_query(
@@ -131,7 +130,7 @@ def log_query(
 ) -> None:
     """
     Log a RAG query event.
-    
+
     Note: We deliberately do NOT accept question or answer text.
     """
     event = AuditEvent(
@@ -159,7 +158,7 @@ def log_upload(
 ) -> None:
     """
     Log a document upload event.
-    
+
     Note: We log doc_id, not filename (which could be sensitive).
     """
     event = AuditEvent(
@@ -181,7 +180,7 @@ def log_delete(
 ) -> None:
     """
     Log a document deletion event.
-    
+
     This creates an audit trail for GDPR compliance.
     """
     event = AuditEvent(
@@ -202,7 +201,7 @@ def log_error(
 ) -> None:
     """
     Log an error event.
-    
+
     Note: We log error_code, not error message (which could contain user input).
     """
     event = AuditEvent(
@@ -244,7 +243,7 @@ class RequestTimer:
         self.start_time: float = 0
         self.elapsed_ms: int = 0
 
-    def __enter__(self) -> "RequestTimer":
+    def __enter__(self) -> RequestTimer:
         self.start_time = time.perf_counter()
         return self
 

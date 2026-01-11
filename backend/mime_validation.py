@@ -41,16 +41,16 @@ ALLOWED_MIME_BY_EXT = {
 def detect_mime(raw: bytes) -> str | None:
     """
     Detect MIME type using python-magic (libmagic).
-    
+
     Args:
         raw: File content as bytes
-        
+
     Returns:
         Detected MIME type or None if unavailable
     """
     try:
         import magic  # type: ignore
-    except Exception as e:
+    except Exception:
         logger.warning(
             "python-magic unavailable, falling back to extension",
             extra={"error_code": "MAGIC_UNAVAILABLE"},
@@ -64,7 +64,7 @@ def detect_mime(raw: bytes) -> str | None:
             return None
         # strip charset if present: "text/plain; charset=us-ascii"
         return out.split(";")[0].strip().lower()
-    except Exception as e:
+    except Exception:
         logger.warning(
             "MIME detection failed, falling back to extension",
             extra={"error_code": "MIME_DETECTION_ERROR"},
@@ -75,11 +75,11 @@ def detect_mime(raw: bytes) -> str | None:
 def validate_mime(ext: str, raw: bytes) -> tuple[bool, str | None]:
     """
     Validate file MIME type against extension.
-    
+
     Args:
         ext: File extension (without dot)
         raw: File content as bytes
-        
+
     Returns:
         Tuple of (is_valid, detected_mime)
         If detection unavailable, returns (True, None) for PoC fallback

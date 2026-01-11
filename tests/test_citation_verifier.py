@@ -10,22 +10,20 @@ Tests cover:
 - Ungrounded claim filtering
 """
 
-import pytest
 from dataclasses import dataclass
 from typing import Any
 
 from backend.citation_verifier import (
     CitationCheck,
     VerificationResult,
-    extract_citations,
     compute_similarity,
+    extract_citations,
+    filter_ungrounded_claims,
+    verify_answer,
     verify_citation_basic,
     verify_citation_presence,
     verify_citation_semantic,
-    verify_answer,
-    filter_ungrounded_claims,
 )
-
 
 # ============================================================================
 # TEST FIXTURES

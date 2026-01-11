@@ -46,7 +46,7 @@ def test_add_document_returns_id(temp_db):
     """Test that add_document returns a valid document ID."""
     doc_id = temp_db.add_document(
         original_name="test.txt",
-        stored_path="/tmp/test.txt",
+        stored_path="/data/test.txt",
         ext="txt",
         sha256="abc123",
         size_bytes=100,
@@ -85,7 +85,7 @@ def test_get_document_by_sha256(temp_db):
     """Test finding document by content hash."""
     temp_db.add_document(
         original_name="unique.txt",
-        stored_path="/tmp/unique.txt",
+        stored_path="/data/unique.txt",
         ext="txt",
         sha256="unique_hash_123",
         size_bytes=50,
@@ -105,9 +105,9 @@ def test_get_document_by_sha256_returns_none_for_missing(temp_db):
 
 def test_list_documents_returns_all(temp_db):
     """Test that list_documents returns all documents."""
-    temp_db.add_document("doc1.txt", "/tmp/1", "txt", "h1", 10)
-    temp_db.add_document("doc2.txt", "/tmp/2", "txt", "h2", 20)
-    temp_db.add_document("doc3.txt", "/tmp/3", "txt", "h3", 30)
+    temp_db.add_document("doc1.txt", "/data/1", "txt", "h1", 10)
+    temp_db.add_document("doc2.txt", "/data/2", "txt", "h2", 20)
+    temp_db.add_document("doc3.txt", "/data/3", "txt", "h3", 30)
 
     docs = temp_db.list_documents()
 
@@ -116,9 +116,9 @@ def test_list_documents_returns_all(temp_db):
 
 def test_list_documents_ordered_by_date_desc(temp_db):
     """Test that documents are returned most recent first."""
-    temp_db.add_document("first.txt", "/tmp/1", "txt", "h1", 10)
-    temp_db.add_document("second.txt", "/tmp/2", "txt", "h2", 20)
-    temp_db.add_document("third.txt", "/tmp/3", "txt", "h3", 30)
+    temp_db.add_document("first.txt", "/data/1", "txt", "h1", 10)
+    temp_db.add_document("second.txt", "/data/2", "txt", "h2", 20)
+    temp_db.add_document("third.txt", "/data/3", "txt", "h3", 30)
 
     docs = temp_db.list_documents()
 
@@ -133,7 +133,7 @@ def test_list_documents_ordered_by_date_desc(temp_db):
 
 def test_add_chunks_stores_mapping(temp_db):
     """Test that chunks are correctly associated with document."""
-    doc_id = temp_db.add_document("doc.txt", "/tmp/doc", "txt", "hash", 100)
+    doc_id = temp_db.add_document("doc.txt", "/data/doc", "txt", "hash", 100)
     chunk_ids = ["chunk_0", "chunk_1", "chunk_2"]
 
     temp_db.add_chunks(doc_id, chunk_ids)
@@ -144,7 +144,7 @@ def test_add_chunks_stores_mapping(temp_db):
 
 def test_get_chunk_ids_preserves_order(temp_db):
     """Test that chunk IDs are returned in correct order."""
-    doc_id = temp_db.add_document("doc.txt", "/tmp/doc", "txt", "hash", 100)
+    doc_id = temp_db.add_document("doc.txt", "/data/doc", "txt", "hash", 100)
     chunk_ids = ["z_last", "a_first", "m_middle"]
 
     temp_db.add_chunks(doc_id, chunk_ids)
@@ -162,7 +162,7 @@ def test_get_chunk_ids_returns_empty_for_missing(temp_db):
 
 def test_delete_document_cascades_to_chunks(temp_db):
     """Test that deleting a document also deletes its chunks."""
-    doc_id = temp_db.add_document("doc.txt", "/tmp/doc", "txt", "hash", 100)
+    doc_id = temp_db.add_document("doc.txt", "/data/doc", "txt", "hash", 100)
     temp_db.add_chunks(doc_id, ["c1", "c2", "c3"])
 
     # Verify chunks exist

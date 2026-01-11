@@ -16,12 +16,12 @@ from dotenv import load_dotenv
 
 from backend import db
 from backend.audit_log import generate_request_id, log_upload
+from backend.auth import render_logout, require_auth
 from backend.documents import delete_document_complete
 from backend.files import save_upload
 from backend.ingest import read_to_text
 from backend.logging_config import setup_logging
 from backend.mime_validation import validate_mime
-from backend.auth import render_logout, require_auth
 from backend.rag import add_doc_chunks, chunk_text
 from backend.settings import settings
 
@@ -203,7 +203,7 @@ else:
             ):
                 try:
                     result = delete_document_complete(d["doc_id"], session_id)
-                    
+
                     if result.success:
                         st.success("Supprimé (fichier + DB + index) ✅")
                     elif result.partial:
@@ -214,7 +214,7 @@ else:
                         st.error(
                             f"Échec suppression. Erreurs: {', '.join(result.errors)}"
                         )
-                    
+
                     st.rerun()
                 except Exception as e:
                     logger.exception(
