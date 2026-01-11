@@ -6,6 +6,7 @@ htmlcov/
 venv/
 .env
 .streamlit/
+.claude/
 data/
 !data/.gitkeep
 .DS_Store
