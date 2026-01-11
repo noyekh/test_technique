@@ -23,10 +23,14 @@ __pycache__/
 .env
 .streamlit/secrets.toml
 
-# Data (mount as volume or regenerate)
-data/
+# Data runtime (mount as volume)
+data/uploads/
+data/chroma/
+data/*.db
+data/*.db-journal
+data/audit.jsonl
+# Note: data/*.txt, data/*.csv, data/*.html are demo files (included)
 logs/
-*.sqlite
 
 # Testing and coverage
 .coverage
