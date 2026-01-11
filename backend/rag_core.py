@@ -309,12 +309,16 @@ RÈGLES DE RÉPONSE:
 2. Cite tes affirmations avec [Source N].
 3. Ajoute si possible un micro-extrait très court (≤ 20 mots) entre guillemets.
 4. N'inclus jamais de longs copier-coller.
-5. Si l'information n'est pas présente dans les SOURCES, tu dois refuser.
-6. Ta réponse doit être concise (< 500 mots)."""
+5. Si AUCUNE information pertinente n'est présente dans les SOURCES, tu dois refuser.
+6. Ta réponse doit être concise (< 500 mots).
+7. Tu peux synthétiser et raisonner logiquement à partir des FAITS des sources. Mais n'invente aucun fait absent des sources, n'ajoute aucune connaissance externe, et ne formule aucune interprétation subjective (évite "cela suggère", "on peut supposer", "il semblerait").
+8. Si la question demande une information qui N'APPARAÎT PAS EXPLICITEMENT dans les sources, refuse. Ne déduis pas, n'extrapole pas, ne "suggère" pas."""
 
 
 def build_messages_for_stream(
-    question: str, context: str
+    question: str,
+    context: str,
+    history: list[dict[str, str]] | None = None,
 ) -> list[dict[str, str]]:
     """
     Build messages for streaming (free-form text response).
@@ -322,21 +326,32 @@ def build_messages_for_stream(
     Args:
         question: User's question
         context: Formatted context with sources
+        history: Optional conversation history for context
 
     Returns:
         List of message dicts with role and content
     """
     system = _SYSTEM_PROMPT_BASE + "\nRéponds directement (pas de JSON).\n"
+    messages: list[dict[str, str]] = [{"role": "system", "content": system}]
+
+    # Add conversation history (last 20 turns max)
+    if history:
+        recent = [
+            {"role": m["role"], "content": m["content"]}
+            for m in history[-20:]
+            if m.get("role") in ("user", "assistant")
+        ]
+        messages.extend(recent)
+
     user = f"QUESTION:\n{question}\n\nSOURCES:\n{context}\n"
-    return [
-        {"role": "system", "content": system},
-        {"role": "user", "content": user},
-    ]
+    messages.append({"role": "user", "content": user})
+    return messages
 
 
 def build_messages_for_structured(
     question: str,
     context: str,
+    history: list[dict[str, str]] | None = None,
     format_instructions: str | None = None,
 ) -> list[dict[str, str]]:
     """
@@ -345,19 +360,29 @@ def build_messages_for_structured(
     Args:
         question: User's question
         context: Formatted context with sources
+        history: Optional conversation history for context
         format_instructions: Optional format instructions to append
 
     Returns:
         List of message dicts with role and content
     """
     system = _SYSTEM_PROMPT_BASE
+    messages: list[dict[str, str]] = [{"role": "system", "content": system}]
+
+    # Add conversation history (last 20 turns max)
+    if history:
+        recent = [
+            {"role": m["role"], "content": m["content"]}
+            for m in history[-20:]
+            if m.get("role") in ("user", "assistant")
+        ]
+        messages.extend(recent)
+
     user = f"QUESTION:\n{question}\n\nSOURCES:\n{context}\n"
     if format_instructions:
         user += f"\nRéponds au format demandé.\n{format_instructions}\n"
-    return [
-        {"role": "system", "content": system},
-        {"role": "user", "content": user},
-    ]
+    messages.append({"role": "user", "content": user})
+    return messages
 
 
 # ============================================================================
@@ -371,6 +396,7 @@ def answer_question(
     llm_invoke_structured: LLMInvokeFn,
     cfg: RagConfig,
     citation_verify_fn: CitationVerifyFn | None = None,
+    history: list[dict[str, str]] | None = None,
 ) -> tuple[str, list[dict[str, Any]]]:
     """
     Generate an answer using structured output with strong validation.
@@ -381,6 +407,7 @@ def answer_question(
         llm_invoke_structured: Function that returns (answer_text, citations_list)
         cfg: RAG configuration
         citation_verify_fn: Optional function for v1.9 citation verification
+        history: Optional conversation history for context
 
     Returns:
         Tuple of (answer_text, sources_metadata)
@@ -393,7 +420,7 @@ def answer_question(
     if context is None:
         return refusal(), []
 
-    messages = build_messages_for_structured(question, context)
+    messages = build_messages_for_structured(question, context, history=history)
 
     try:
         answer_text, citations = llm_invoke_structured(messages)
@@ -460,6 +487,7 @@ def answer_question_buffered(
     llm_invoke_structured: LLMInvokeFn,
     cfg: RagConfig,
     citation_verify_fn: CitationVerifyFn | None = None,
+    history: list[dict[str, str]] | None = None,
 ) -> tuple[str, list[dict[str, Any]], list[str], list[str]]:
     """
     Generate an answer with full audit trail.
@@ -474,6 +502,7 @@ def answer_question_buffered(
         llm_invoke_structured: Function that returns (answer_text, citations_list)
         cfg: RAG configuration
         citation_verify_fn: Optional function for v1.9 citation verification
+        history: Optional conversation history for context
 
     Returns:
         Tuple of (answer_text, sources_metadata, doc_ids, chunk_ids)
@@ -490,7 +519,7 @@ def answer_question_buffered(
     doc_ids = list({s.get("doc_id", "") for s in sources_meta if s.get("doc_id")})
     chunk_ids = [f"{s.get('doc_id')}:{s.get('chunk')}" for s in sources_meta]
 
-    messages = build_messages_for_structured(question, context)
+    messages = build_messages_for_structured(question, context, history=history)
 
     try:
         answer_text, citations = llm_invoke_structured(messages)
@@ -556,6 +585,7 @@ def stream_answer(
     retriever: RetrieverFn,
     llm_stream: LLMStreamFn,
     cfg: RagConfig,
+    history: list[dict[str, str]] | None = None,
 ) -> tuple[str | None, list[dict[str, Any]], int, Iterator[str]]:
     """
     Stream an answer token by token.
@@ -570,6 +600,7 @@ def stream_answer(
         retriever: Function to retrieve relevant documents
         llm_stream: Function that yields tokens
         cfg: RAG configuration
+        history: Optional conversation history for context
 
     Returns:
         Tuple of (refusal_or_none, sources_meta, max_src, token_iterator)
@@ -586,7 +617,7 @@ def stream_answer(
     if context is None:
         return refusal(), [], 0, iter(())
 
-    messages = build_messages_for_stream(question, context)
+    messages = build_messages_for_stream(question, context, history=history)
 
     def _iter() -> Iterator[str]:
         try:

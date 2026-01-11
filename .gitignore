@@ -18,9 +18,13 @@ venv/
 # Streamlit
 .streamlit/
 
-# Data (SQLite, ChromaDB, uploads)
-data/
-!data/.gitkeep
+# Data (runtime - SQLite, ChromaDB, uploads)
+data/uploads/
+data/chroma/
+data/*.db
+data/*.db-journal
+data/audit.jsonl
+# Note: data/*.txt, data/*.csv, data/*.html are demo files (versioned)
 
 # Logs
 logs/

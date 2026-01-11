@@ -9,6 +9,7 @@ SECURITY:
 
 import logging
 import os
+import re
 import uuid
 
 import streamlit as st
@@ -26,6 +27,7 @@ from backend.rag import (
     answer_question_buffered,
     refusal,
 )
+from backend.rag_runtime import contextualize_query
 from backend.auth import render_logout, require_auth
 from backend.rate_limit import check_rate_limit
 from backend.settings import settings
@@ -37,14 +39,23 @@ db.init_db()
 logger = logging.getLogger(__name__)
 
 
-def _display_sources(sources: list[dict] | None) -> None:
-    """Display sources in a user-friendly expander (no technical jargon)."""
-    with st.expander("🔎 Sources citées"):
+def _extract_cited_sources(answer: str) -> set[int]:
+    """Extract source numbers cited in the answer [Source N]."""
+    return {int(m.group(1)) for m in re.finditer(r"\[Source\s+(\d+)\]", answer, re.IGNORECASE)}
+
+
+def _display_sources(sources: list[dict] | None, answer: str = "") -> None:
+    """Display sources in a user-friendly expander. Grays out uncited sources."""
+    cited = _extract_cited_sources(answer) if answer else set()
+    with st.expander("🔎 Sources consultées"):
         if not sources:
             st.caption("Aucune source (refus ou documents insuffisants).")
         else:
             for s in sources:
-                st.markdown(f"📄 **[Source {s['i']}]** — *{s['source']}*")
+                if not cited or s["i"] in cited:
+                    st.markdown(f"📄 **[Source {s['i']}]** — *{s['source']}*")
+                else:
+                    st.caption(f"📄 [Source {s['i']}] — {s['source']} *(non citée)*")
 
 # Note: st.set_page_config() est dans main.py (st.navigation)
 username = require_auth()  # Bloque si non authentifié
@@ -119,6 +130,21 @@ with st.sidebar:
 
     st.divider()
 
+    # v1.11: Debug panel (contextualisation)
+    ctx_debug = st.session_state.get("_last_ctx_debug")
+    if ctx_debug:
+        with st.expander("🐛 Debug"):
+            if ctx_debug[0] == "reformulated":
+                st.success(f"🔄 {ctx_debug[1]}")
+            elif ctx_debug[0] == "unchanged":
+                st.info(f"ℹ️ Pas de reformulation ({ctx_debug[1]} msgs)")
+            elif ctx_debug[0] == "no_history":
+                st.caption("ℹ️ Première question (pas d'historique)")
+            elif ctx_debug[0] == "error":
+                st.error(f"⚠️ {ctx_debug[1]}")
+            if len(ctx_debug) >= 4:
+                st.caption(f"📊 Sources: {ctx_debug[2]} | Docs: {ctx_debug[3]}")
+
     render_logout()
     st.caption(f"Connecté: {username}")
 
@@ -147,6 +173,7 @@ with st.sidebar:
             st.cache_resource.clear()
             st.rerun()
 
+
 conv_id = st.session_state["active_conv_id"]
 session_id = st.session_state["session_id"]
 
@@ -155,9 +182,9 @@ msgs = db.get_messages(conv_id)
 for idx, m in enumerate(msgs):
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
-        # Show sources for assistant messages (if available)
-        if m["role"] == "assistant" and m.get("sources"):
-            _display_sources(m["sources"])
+        # Show sources for assistant messages (if available and not a refusal)
+        if m["role"] == "assistant" and m.get("sources") and m["content"] != refusal():
+            _display_sources(m["sources"], m["content"])
         # Show regenerate button for the last assistant message only
         if m["role"] == "assistant" and idx == len(msgs) - 1:
             if st.button("🔄 Régénérer", key="regen_btn", help="Supprimer cette réponse et en générer une nouvelle"):
@@ -200,11 +227,30 @@ if prompt:
     # Generate response (BUFFERED - no streaming to user)
     with st.chat_message("assistant"):
         with st.spinner("Recherche dans les documents + génération…"):
+            ctx_debug = None  # Store debug info for display after spinner
             with RequestTimer() as timer:
                 try:
-                    # Use buffered version - response is validated before we see it
+                    # Build conversation history for context
+                    history = [{"role": m["role"], "content": m["content"]} for m in msgs]
+
+                    # v1.11: Contextualize query for retrieval
+                    search_query = prompt
+                    if history:
+                        try:
+                            search_query = contextualize_query(prompt, history)
+                            if search_query != prompt:
+                                ctx_debug = ("reformulated", search_query)
+                            else:
+                                ctx_debug = ("unchanged", len(history))
+                        except Exception as ctx_err:
+                            ctx_debug = ("error", str(ctx_err))
+
+                    # Use buffered version:
+                    # - search_query for retrieval (contextualized)
+                    # - history for LLM context (original conversation)
                     answer, sources_meta, doc_ids, chunk_ids = answer_question_buffered(
-                        prompt
+                        search_query,
+                        history=history,
                     )
                     is_refusal = answer == refusal()
                     
@@ -230,11 +276,20 @@ if prompt:
                 verdict="refusal" if is_refusal else "answer",
             )
 
+        # Store debug in session for persistence (v1.11)
+        # Always store retrieval stats, even without contextualization
+        if ctx_debug:
+            debug_info = (*ctx_debug, len(sources_meta), len(doc_ids))
+        else:
+            debug_info = ("no_history", 0, len(sources_meta), len(doc_ids))
+        st.session_state["_last_ctx_debug"] = debug_info
+
         # Display the validated response
         st.markdown(answer)
 
-        # Display sources
-        _display_sources(sources_meta)
+        # Display sources (only if not a refusal)
+        if not is_refusal:
+            _display_sources(sources_meta, answer)
 
     # Save assistant response with sources
     db.add_message(conv_id, "assistant", answer, sources=sources_meta)

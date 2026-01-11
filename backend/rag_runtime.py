@@ -354,6 +354,98 @@ def _llm_expand_fn(prompt: str) -> list[str]:
         return []
 
 
+# ============================================================================
+# QUERY CONTEXTUALIZATION (v1.11 - Conversational RAG)
+# ============================================================================
+
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.messages import HumanMessage, AIMessage
+
+
+def contextualize_query(
+    question: str,
+    history: list[dict[str, str]] | None = None,
+) -> str:
+    """
+    Reformulate a question to be standalone using conversation history.
+
+    v1.11: Uses LangChain's native prompt templates for reliable contextualization.
+
+    Args:
+        question: Current user question (may contain references)
+        history: Conversation history [{role, content}, ...]
+
+    Returns:
+        Standalone question suitable for retrieval
+    """
+    import streamlit as st  # For debug output
+
+    # Skip if no history
+    if not history:
+        return question
+
+    # Filter to only user/assistant messages with content
+    valid_history = [
+        m for m in history
+        if m.get("role") in ("user", "assistant") and m.get("content")
+    ]
+
+    if not valid_history:
+        return question
+
+    try:
+        # Convert to LangChain message format
+        chat_history = []
+        for msg in valid_history[-6:]:  # Last 3 exchanges
+            content = msg["content"][:500]
+            if msg["role"] == "user":
+                chat_history.append(HumanMessage(content=content))
+            else:
+                chat_history.append(AIMessage(content=content))
+
+        # LangChain native prompt template
+        contextualize_prompt = ChatPromptTemplate.from_messages([
+            ("system",
+             "Tu es un reformulateur de questions. "
+             "Étant donné l'historique de conversation et la dernière question, "
+             "reformule cette question pour qu'elle soit autonome et compréhensible sans contexte.\n\n"
+             "RÈGLES:\n"
+             "- Remplace 'le premier', 'celui-ci', 'ça', 'il', 'elle' par les termes explicites\n"
+             "- NE POSE PAS de question de clarification\n"
+             "- NE RÉPONDS PAS à la question\n"
+             "- Retourne UNIQUEMENT la question reformulée, rien d'autre\n"
+             "- Si plusieurs interprétations possibles, choisis la plus probable\n\n"
+             "Exemple:\n"
+             "Historique: 'Quels sont les taux?' → 'Les taux sont 90% et 95%'\n"
+             "Question: 'Explique le premier'\n"
+             "Reformulation: 'Explique le taux de 90%'"),
+            MessagesPlaceholder(variable_name="chat_history"),
+            ("human", "{input}"),
+        ])
+
+        # Create chain and invoke
+        chain = contextualize_prompt | llm()
+        response = chain.invoke({
+            "chat_history": chat_history,
+            "input": question,
+        })
+
+        reformulated = response.content.strip() if hasattr(response, "content") else str(response).strip()
+
+        # Clean up
+        reformulated = reformulated.strip('"\'')
+
+        if reformulated and 5 <= len(reformulated) < 500 and reformulated != question:
+            logger.info(f"Contextualized: '{question}' -> '{reformulated}'")
+            return reformulated
+
+        return question
+
+    except Exception as e:
+        logger.error(f"Contextualization error: {type(e).__name__}: {e}")
+        return question
+
+
 def retriever_fn(question: str, k: int) -> list[tuple[Document, float]]:
     """
     Full v1.9 retrieval pipeline: Multi-query → Hybrid → Rerank.
@@ -561,16 +653,23 @@ def llm_invoke_structured(messages: list[dict[str, str]]) -> tuple[str, list[int
         "- Les deux champs sont OBLIGATOIRES\n"
     )
 
-    # Build final user message with format instructions
-    user_content = messages[1]["content"] + format_msg
-
     # Call LLM directly (avoid ChatPromptTemplate issues with braces)
-    from langchain_core.messages import SystemMessage, HumanMessage
+    from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 
-    llm_messages = [
-        SystemMessage(content=messages[0]["content"]),
-        HumanMessage(content=user_content),
-    ]
+    # Build LLM messages with full history support
+    # messages structure: [system, ...history..., current_user_with_sources]
+    llm_messages = [SystemMessage(content=messages[0]["content"])]
+
+    # Add history messages (indices 1 to -1, excluding last)
+    for msg in messages[1:-1]:
+        if msg["role"] == "user":
+            llm_messages.append(HumanMessage(content=msg["content"]))
+        elif msg["role"] == "assistant":
+            llm_messages.append(AIMessage(content=msg["content"]))
+
+    # Add current user message (last) with format instructions
+    user_content = messages[-1]["content"] + format_msg
+    llm_messages.append(HumanMessage(content=user_content))
 
     try:
         raw_response = llm().invoke(llm_messages)

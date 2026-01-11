@@ -81,19 +81,26 @@ def _citation_verify_fn(
     return result.verified_answer
 
 
-def answer_question_buffered(question: str) -> tuple[str, list[dict[str, Any]], list[str], list[str]]:
+def answer_question_buffered(
+    question: str,
+    history: list[dict[str, str]] | None = None,
+) -> tuple[str, list[dict[str, Any]], list[str], list[str]]:
     """
     Answer a question using RAG with structured output and full validation.
 
     This is the RECOMMENDED entry point (non-streaming, fully validated).
     Returns complete audit information without exposing any response until validated.
 
-    v1.9 Pipeline:
-    Query → Multi-query (3 variants) → Hybrid BM25+Dense (top_k=100) →
-    Rerank (top_n=15) → LLM → Citation verification
+    v1.11 Pipeline:
+    Query (pre-contextualized) → Multi-query (3 variants) →
+    Hybrid BM25+Dense (top_k=100) → Rerank (top_n=15) → LLM → Citation verification
+
+    Note: Query contextualization should be done by the caller (UI layer)
+    before calling this function. The history is still passed for LLM context.
 
     Args:
-        question: User's question
+        question: User's question (should be pre-contextualized if needed)
+        history: Optional conversation history for LLM context
 
     Returns:
         Tuple of (answer_text, sources_metadata, doc_ids, chunk_ids)
@@ -110,15 +117,20 @@ def answer_question_buffered(question: str) -> tuple[str, list[dict[str, Any]], 
         llm_invoke_structured=llm_invoke_structured,
         cfg=cfg,
         citation_verify_fn=_citation_verify_fn if settings.citation_verification_enabled else None,
+        history=history,
     )
 
 
-def answer_question(question: str) -> tuple[str, list[dict[str, Any]]]:
+def answer_question(
+    question: str,
+    history: list[dict[str, str]] | None = None,
+) -> tuple[str, list[dict[str, Any]]]:
     """
     Answer a question using RAG with structured output.
 
     Args:
-        question: User's question
+        question: User's question (should be pre-contextualized if needed)
+        history: Optional conversation history for LLM context
 
     Returns:
         Tuple of (answer_text, sources_metadata)
@@ -134,20 +146,23 @@ def answer_question(question: str) -> tuple[str, list[dict[str, Any]]]:
         retriever=retriever_fn,
         llm_invoke_structured=llm_invoke_structured,
         cfg=cfg,
+        history=history,
     )
 
 
 def stream_answer_tokens(
     question: str,
+    history: list[dict[str, str]] | None = None,
 ) -> tuple[str | None, list[dict[str, Any]], int, Iterator[str]]:
     """
     Stream an answer token by token.
-    
+
     WARNING: This function is DEPRECATED for legal contexts.
     Use answer_question_buffered() instead to ensure validation before display.
 
     Args:
-        question: User's question
+        question: User's question (should be pre-contextualized if needed)
+        history: Optional conversation history for LLM context
 
     Returns:
         Tuple of (refusal_or_none, sources_meta, max_src, token_iterator)
@@ -166,6 +181,7 @@ def stream_answer_tokens(
         retriever=retriever_fn,
         llm_stream=llm_stream_tokens,
         cfg=cfg,
+        history=history,
     )
 
 
