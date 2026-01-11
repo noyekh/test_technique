@@ -12,6 +12,10 @@ langchain-community>=0.3
 # 200M tokens FREE, surpasses voyage-law-2 on legal benchmarks
 langchain-voyageai>=0.1
 
+# v1.9: Voyage AI reranker (rerank-2.5)
+# +40% MRR, -35% hallucinations
+voyageai>=0.3
+
 # v1.6: Token-aware chunking
 tiktoken>=0.7
 
@@ -30,8 +34,11 @@ tenacity>=8.2
 # MIME validation (libmagic). If libmagic missing, app falls back gracefully.
 python-magic>=0.4.27
 
+# Testing & CI
 pytest>=8.0
+pytest-cov>=4.1
 ruff>=0.6
+bandit>=1.7
 
 # v1.8: Authentication
 streamlit-authenticator>=0.3.2

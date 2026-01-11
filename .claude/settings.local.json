@@ -1,7 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python -m pytest tests/ -v --tb=short)"
+      "Bash(python -m pytest tests/ -v --tb=short)",
+      "WebFetch(domain:docs.streamlit.io)",
+      "WebFetch(domain:ber2.github.io)",
+      "Bash(source .venv_test/bin/activate)",
+      "Bash(pip install:*)",
+      "Bash(python -m py_compile:*)",
+      "Bash(pip show:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(/mnt/c/Users/nbese/AppData/Local/Programs/Python/Python312/python.exe -m py_compile:*)",
+      "WebFetch(domain:www.shapeof.ai)",
+      "WebFetch(domain:www.tensorlake.ai)"
     ]
   }
 }

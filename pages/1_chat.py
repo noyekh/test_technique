@@ -1,7 +1,7 @@
 """
 Chatbot page - RAG-based Q&A interface.
 
-SECURITY (v1.5):
+SECURITY:
 - Streaming is DISABLED by default for legal contexts
 - All responses are buffered and validated BEFORE display
 - Audit logging with allowlist policy
@@ -36,9 +36,36 @@ db.init_db()
 
 logger = logging.getLogger(__name__)
 
-st.set_page_config(page_title="Chatbot", page_icon="💬", layout="wide")
+
+def _display_sources(sources: list[dict] | None) -> None:
+    """Display sources in a user-friendly expander (no technical jargon)."""
+    with st.expander("🔎 Sources citées"):
+        if not sources:
+            st.caption("Aucune source (refus ou documents insuffisants).")
+        else:
+            for s in sources:
+                st.markdown(f"📄 **[Source {s['i']}]** — *{s['source']}*")
+
+# Note: st.set_page_config() est dans main.py (st.navigation)
 username = require_auth()  # Bloque si non authentifié
-st.title("💬 Chatbot interne (RAG strict)")
+st.title("💬 Cabinet Emilia Parenti — Chatbot RAG")
+
+# Welcome info (replaces main.py landing page)
+with st.expander("ℹ️ À propos de ce PoC", expanded=False):
+    st.markdown(
+        """
+**Chatbot strictement basé sur les documents uploadés.**
+
+1. Va dans **Documents** pour uploader / supprimer et vectoriser
+2. Reviens ici pour poser des questions
+
+**Architecture v1.10** :
+- ✅ Réponses validées avant affichage (pas de streaming)
+- ✅ Citations vérifiées post-génération
+- ✅ Logs minimalistes (allowlist RGPD)
+- ✅ Prompt durci : documents = données non fiables
+"""
+    )
 
 if not os.getenv("OPENAI_API_KEY"):
     st.error("OPENAI_API_KEY manquant : impossible d'appeler le modèle.")
@@ -59,10 +86,10 @@ with st.sidebar:
 
     convs = db.list_conversations()
     options = [c["conv_id"] for c in convs] if convs else [default_conv]
-    labels = {c["conv_id"]: f"{c['title']} · {c['conv_id'][:6]}" for c in convs}
+    labels = {c["conv_id"]: c["title"] for c in convs}
 
     def _fmt(cid: str) -> str:
-        return labels.get(cid, f"Conversation {cid[:6]}")
+        return labels.get(cid, "Nouvelle conversation")
 
     current = st.session_state["active_conv_id"]
     if current not in options:
@@ -81,24 +108,44 @@ with st.sidebar:
             st.session_state["active_conv_id"] = new_id
             st.rerun()
     with col_b:
-        if st.button("🧹 Rafraîchir", use_container_width=True):
-            st.rerun()
+        # Only show delete if more than one conversation exists
+        if len(convs) > 1:
+            if st.button("🗑️ Supprimer", use_container_width=True, key="delete_conv_btn"):
+                db.delete_conversation(selected)
+                # Switch to another conversation
+                remaining = [c for c in convs if c["conv_id"] != selected]
+                st.session_state["active_conv_id"] = remaining[0]["conv_id"] if remaining else db.ensure_default_conversation()
+                st.rerun()
 
     st.divider()
 
     render_logout()
     st.caption(f"Connecté: {username}")
 
-    # Security notice
-    st.info(
-        "🔒 **Mode sécurisé (v1.5)**\n\n"
-        "Les réponses sont validées avant affichage. "
-        "Le streaming est désactivé pour garantir la conformité."
-    )
+    # Technical details in expander (for developers)
+    with st.expander("⚙️ Paramètres techniques"):
+        st.caption(f"Rate limit: {settings.rate_limit_max_requests} req / {settings.rate_limit_window_seconds}s")
+        st.caption(f"Modèle: {settings.openai_chat_model}")
+        st.caption("Mode sécurisé: streaming désactivé, réponses validées")
 
-    st.caption(
-        f"Rate limit: {settings.rate_limit_max_requests}/{settings.rate_limit_window_seconds}s"
-    )
+        # Vectorstore diagnostic (moved from main area)
+        st.divider()
+        st.caption("**Vectorstore:**")
+        try:
+            from backend.rag_runtime import vectorstore
+            vs = vectorstore()
+            collection = vs.get()
+            doc_count = len(collection.get("ids", []))
+            if doc_count > 0:
+                st.caption(f"✅ {doc_count} chunks indexés")
+            else:
+                st.caption("⚠️ Vide — uploadez des documents")
+        except Exception as e:
+            st.caption(f"❌ Erreur: {e}")
+        if st.button("🔄 Vider le cache", use_container_width=True):
+            st.cache_data.clear()
+            st.cache_resource.clear()
+            st.rerun()
 
 conv_id = st.session_state["active_conv_id"]
 session_id = st.session_state["session_id"]
@@ -108,6 +155,9 @@ msgs = db.get_messages(conv_id)
 for m in msgs:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
+        # Show sources for assistant messages (if available)
+        if m["role"] == "assistant" and m.get("sources"):
+            _display_sources(m["sources"])
 
 # Chat input
 prompt = st.chat_input("Pose ta question (réponse uniquement sur documents)…")
@@ -169,16 +219,8 @@ if prompt:
         st.markdown(answer)
 
         # Display sources
-        with st.expander("🔎 Sources"):
-            if not sources_meta:
-                st.write("Aucune source (refus ou score insuffisant).")
-            else:
-                for s in sources_meta:
-                    st.write(
-                        f"- **Source {s['i']}** — {s['source']} "
-                        f"(chunk {s['chunk']}) — score {s['score']:.3f}"
-                    )
+        _display_sources(sources_meta)
 
-    # Save assistant response
-    db.add_message(conv_id, "assistant", answer)
+    # Save assistant response with sources
+    db.add_message(conv_id, "assistant", answer, sources=sources_meta)
     st.rerun()

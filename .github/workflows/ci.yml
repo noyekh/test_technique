@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Check code style (ruff)
+        run: ruff check .
+
+      - name: Check formatting (ruff format)
+        run: ruff format --check .
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install bandit
+        run: pip install bandit
+
+      - name: Run security scan
+        run: bandit -r backend/ -ll -ii -x backend/__pycache__
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests with coverage
+        env:
+          # Dummy keys for tests (no actual API calls)
+          OPENAI_API_KEY: "sk-test-dummy-key-for-ci"
+          VOYAGE_API_KEY: "test-voyage-key-for-ci"
+          AUTH_ENABLED: "false"
+        run: |
+          pytest -v --cov=backend --cov-report=xml --cov-report=term-missing --junitxml=test-results.xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          file: coverage.xml
+          fail_ci_if_error: false
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: test-results.xml
+
+  streamlit-smoke:
+    name: Streamlit Smoke Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Create test secrets
+        run: |
+          mkdir -p .streamlit
+          cat > .streamlit/secrets.toml << 'EOF'
+          [auth]
+          cookie_name = "test_auth"
+          cookie_key = "test_key_32_chars_for_ci_testing!"
+          cookie_expiry_days = 1
+
+          [auth.credentials.usernames.testuser]
+          name = "Test User"
+          password = "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.G/X/Y3YQvMqQHa"
+          EOF
+
+      - name: Verify app imports
+        env:
+          OPENAI_API_KEY: "sk-test-dummy"
+          VOYAGE_API_KEY: "test-voyage"
+          AUTH_ENABLED: "false"
+        run: |
+          python -c "from backend import db, rag, auth, settings; print('Imports OK')"
+          python -c "from backend.rag_core import RagConfig, answer_question; print('RAG core OK')"

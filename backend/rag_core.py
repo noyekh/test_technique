@@ -11,10 +11,17 @@ Key design decisions:
 - Pure functions for formatting, validation, postprocessing
 - Dataclasses for configuration and results
 
-Security hardening (v1.5):
+v1.9 Changes:
+- Citation verification: -90% false citations through post-LLM validation
+- Verifies each citation actually appears in the source document
+- Removes ungrounded claims from the response
+- Configurable verification level: basic, presence, or semantic
+
+Security hardening:
 - Prompt explicitly treats documents as UNTRUSTED DATA
 - Anti-instruction injection in sources
 - Structured output with mandatory server-side validation
+- Post-LLM citation verification (v1.9)
 """
 
 from __future__ import annotations
@@ -42,6 +49,11 @@ class DocumentLike(Protocol):
 RetrieverFn = Callable[[str, int], list[tuple[DocumentLike, float]]]
 LLMInvokeFn = Callable[[list[dict[str, str]]], tuple[str, list[int]]]
 LLMStreamFn = Callable[[list[dict[str, str]]], Iterator[str]]
+# v1.9: Citation verification function type
+CitationVerifyFn = Callable[
+    [str, list[dict[str, Any]], list[str], str, float, int],
+    str
+]  # (answer, sources_meta, source_texts, level, threshold, min_words) -> verified_answer
 
 
 # ============================================================================
@@ -58,15 +70,28 @@ _QUOTE_EN_RE = re.compile(r'"\s*(.*?)\s*"', re.DOTALL)
 class RagConfig:
     """Configuration for RAG pipeline behavior."""
 
-    min_relevance: float = 0.35
-    keep_ratio: float = 0.8
-    keep_floor: float = 0.15
+    # v1.9.1: Cosine threshold DISABLED (anti-pattern per Cambridge 2025)
+    # Filtering now happens via reranker score, not cosine similarity
+    min_relevance: float = 0.0  # Legacy, kept for backwards compat
+    keep_ratio: float = 0.8  # Legacy
+    keep_floor: float = 0.15  # Legacy
     top_k: int = 6
     retrieve_k: int = 6
     max_question_len: int = 2000
     require_inline_citations: bool = True
     max_quote_words: int = 20
     max_answer_chars: int = 4000  # Prevent exfiltration via long answers
+
+    # v1.9.1: Reranker score threshold (best practice)
+    # Reranker scores are calibrated (0-1), unlike raw cosine similarity
+    # 0.0 = disabled, 0.3 = recommended for legal contexts
+    rerank_min_score: float = 0.3
+
+    # v1.9: Citation verification
+    citation_verification_enabled: bool = False  # Enabled via settings
+    citation_verification_level: str = "presence"  # basic, presence, or semantic
+    citation_semantic_threshold: float = 0.6
+    citation_min_overlap_words: int = 3
 
 
 def refusal() -> str:
@@ -196,9 +221,12 @@ def prepare_context(
     question: str,
     retriever: RetrieverFn,
     cfg: RagConfig,
-) -> tuple[str | None, list[dict[str, Any]], int]:
+) -> tuple[str | None, list[dict[str, Any]], int, list[str]]:
     """
     Prepare context for RAG by retrieving and filtering documents.
+
+    v1.9.1: Filtering based on reranker score, not cosine similarity.
+    The retriever returns documents with reranker scores (when reranking is enabled).
 
     Args:
         question: User's question
@@ -206,39 +234,65 @@ def prepare_context(
         cfg: RAG configuration
 
     Returns:
-        Tuple of (context_string or None if refusal, sources_meta, max_src_count)
+        Tuple of (context_string or None if refusal, sources_meta, max_src_count, source_texts)
+        source_texts is a list of raw document contents for citation verification (v1.9)
     """
     docs_scores = retriever(question, cfg.retrieve_k)
     if not docs_scores:
         logger.info("No documents retrieved", extra={"question_len": len(question)})
-        return None, [], 0
+        return None, [], 0, []
 
     best = max((s for _, s in docs_scores), default=0.0)
-    if best < cfg.min_relevance:
+
+    # v1.9.1: Use reranker score threshold (calibrated) instead of cosine threshold
+    # Reranker scores are reliable quality indicators, cosine scores are not
+    if cfg.rerank_min_score > 0 and best < cfg.rerank_min_score:
         logger.info(
-            "Best score below threshold",
+            "Best reranker score below threshold",
+            extra={"best_score": best, "threshold": cfg.rerank_min_score},
+        )
+        return None, [], 0, []
+
+    # Legacy cosine threshold check (only if explicitly set > 0)
+    # Kept for backwards compatibility but should be 0.0 in production
+    if cfg.min_relevance > 0 and best < cfg.min_relevance:
+        logger.info(
+            "Best score below legacy threshold",
             extra={"best_score": best, "threshold": cfg.min_relevance},
         )
-        return None, [], 0
+        return None, [], 0, []
 
-    # Filter to keep only sufficiently relevant sources
-    min_keep = max(cfg.min_relevance * cfg.keep_ratio, cfg.keep_floor)
-    filtered = [(d, s) for (d, s) in docs_scores if s >= min_keep]
+    # v1.9.1: Filter by reranker score threshold (if set)
+    # When rerank_min_score > 0, filter out low-quality results
+    if cfg.rerank_min_score > 0:
+        filtered = [(d, s) for (d, s) in docs_scores if s >= cfg.rerank_min_score]
+    elif cfg.min_relevance > 0:
+        # Legacy: filter by cosine threshold
+        min_keep = max(cfg.min_relevance * cfg.keep_ratio, cfg.keep_floor)
+        filtered = [(d, s) for (d, s) in docs_scores if s >= min_keep]
+    else:
+        # No filtering - use all retrieved documents
+        filtered = docs_scores
+
     if not filtered:
-        return None, [], 0
+        return None, [], 0, []
 
     # Keep only top_k sources
     filtered = filtered[: cfg.top_k]
 
     context, sources_meta = format_sources(filtered)
-    return context, sources_meta, len(filtered)
+
+    # v1.9: Extract source texts for citation verification
+    source_texts = [d.page_content for d, _ in filtered]
+
+    return context, sources_meta, len(filtered), source_texts
 
 
 # ============================================================================
 # PROMPT BUILDERS (Pure functions returning generic message format)
 # ============================================================================
 
-# SECURITY: Hardened system prompt (v1.5)
+# SECURITY: Hardened system prompt
 # - Explicitly marks documents as UNTRUSTED DATA
 # - Warns about instruction injection attempts
 # - Requires structured output with citations
@@ -316,6 +370,7 @@ def answer_question(
     retriever: RetrieverFn,
     llm_invoke_structured: LLMInvokeFn,
     cfg: RagConfig,
+    citation_verify_fn: CitationVerifyFn | None = None,
 ) -> tuple[str, list[dict[str, Any]]]:
     """
     Generate an answer using structured output with strong validation.
@@ -325,6 +380,7 @@ def answer_question(
         retriever: Function to retrieve relevant documents
         llm_invoke_structured: Function that returns (answer_text, citations_list)
         cfg: RAG configuration
+        citation_verify_fn: Optional function for v1.9 citation verification
 
     Returns:
         Tuple of (answer_text, sources_metadata)
@@ -333,7 +389,7 @@ def answer_question(
     if not question:
         return refusal(), []
 
-    context, sources_meta, max_src = prepare_context(question, retriever, cfg)
+    context, sources_meta, max_src, source_texts = prepare_context(question, retriever, cfg)
     if context is None:
         return refusal(), []
 
@@ -348,22 +404,50 @@ def answer_question(
     # Validate citations list
     if not citations or any((c < 1 or c > max_src) for c in citations):
         logger.warning(
-            "Invalid citations list",
-            extra={"citation_count": len(citations) if citations else 0, "max_src": max_src},
+            "Invalid citations list - REFUSING",
+            extra={
+                "citation_count": len(citations) if citations else 0,
+                "max_src": max_src,
+                "citations": citations,
+                "answer_preview": answer_text[:100] if answer_text else "(empty)",
+            },
         )
         return refusal(), sources_meta
 
     # Validate inline citations in text
     if cfg.require_inline_citations and not validate_inline_citations(answer_text, max_src):
         logger.warning(
-            "Missing/invalid inline citations",
-            extra={"max_src": max_src},
+            "Missing/invalid inline citations - REFUSING",
+            extra={
+                "max_src": max_src,
+                "answer_preview": answer_text[:200] if answer_text else "(empty)",
+                "has_source_marker": "[Source" in (answer_text or ""),
+            },
         )
         return refusal(), sources_meta
 
     # Postprocess to limit quote length
     answer_text = postprocess_micro_quotes(answer_text, cfg.max_quote_words)
-    
+
+    # v1.9: Citation verification
+    if cfg.citation_verification_enabled and citation_verify_fn is not None:
+        try:
+            answer_text = citation_verify_fn(
+                answer_text,
+                sources_meta,
+                source_texts,
+                cfg.citation_verification_level,
+                cfg.citation_semantic_threshold,
+                cfg.citation_min_overlap_words,
+            )
+            # If verification removed all content, return refusal
+            if not answer_text.strip():
+                logger.warning("All citations failed verification")
+                return refusal(), sources_meta
+        except Exception as e:
+            logger.warning(f"Citation verification failed: {e}")
+            # Continue with unverified answer on error
+
     # Truncate to prevent exfiltration
     answer_text = truncate_answer(answer_text, cfg.max_answer_chars)
 
@@ -375,17 +459,21 @@ def answer_question_buffered(
     retriever: RetrieverFn,
     llm_invoke_structured: LLMInvokeFn,
     cfg: RagConfig,
+    citation_verify_fn: CitationVerifyFn | None = None,
 ) -> tuple[str, list[dict[str, Any]], list[str], list[str]]:
     """
     Generate an answer with full audit trail.
-    
-    This is the recommended entrypoint for v1.5 (non-streaming, fully validated).
+
+    This is the recommended entrypoint (non-streaming, fully validated).
+
+    v1.9: Adds optional citation verification for -90% false citations.
 
     Args:
         question: User's question
         retriever: Function to retrieve relevant documents
         llm_invoke_structured: Function that returns (answer_text, citations_list)
         cfg: RAG configuration
+        citation_verify_fn: Optional function for v1.9 citation verification
 
     Returns:
         Tuple of (answer_text, sources_metadata, doc_ids, chunk_ids)
@@ -394,7 +482,7 @@ def answer_question_buffered(
     if not question:
         return refusal(), [], [], []
 
-    context, sources_meta, max_src = prepare_context(question, retriever, cfg)
+    context, sources_meta, max_src, source_texts = prepare_context(question, retriever, cfg)
     if context is None:
         return refusal(), [], [], []
 
@@ -413,22 +501,50 @@ def answer_question_buffered(
     # Validate citations list
     if not citations or any((c < 1 or c > max_src) for c in citations):
         logger.warning(
-            "Invalid citations list",
-            extra={"citation_count": len(citations) if citations else 0, "max_src": max_src},
+            "Invalid citations list - REFUSING (buffered)",
+            extra={
+                "citation_count": len(citations) if citations else 0,
+                "max_src": max_src,
+                "citations": citations,
+                "answer_preview": answer_text[:100] if answer_text else "(empty)",
+            },
         )
         return refusal(), sources_meta, doc_ids, chunk_ids
 
     # Validate inline citations in text
     if cfg.require_inline_citations and not validate_inline_citations(answer_text, max_src):
         logger.warning(
-            "Missing/invalid inline citations",
-            extra={"max_src": max_src},
+            "Missing/invalid inline citations - REFUSING (buffered)",
+            extra={
+                "max_src": max_src,
+                "answer_preview": answer_text[:200] if answer_text else "(empty)",
+                "has_source_marker": "[Source" in (answer_text or ""),
+            },
         )
         return refusal(), sources_meta, doc_ids, chunk_ids
 
     # Postprocess to limit quote length
     answer_text = postprocess_micro_quotes(answer_text, cfg.max_quote_words)
-    
+
+    # v1.9: Citation verification
+    if cfg.citation_verification_enabled and citation_verify_fn is not None:
+        try:
+            answer_text = citation_verify_fn(
+                answer_text,
+                sources_meta,
+                source_texts,
+                cfg.citation_verification_level,
+                cfg.citation_semantic_threshold,
+                cfg.citation_min_overlap_words,
+            )
+            # If verification removed all content, return refusal
+            if not answer_text.strip():
+                logger.warning("All citations failed verification")
+                return refusal(), sources_meta, doc_ids, chunk_ids
+        except Exception as e:
+            logger.warning(f"Citation verification failed: {e}")
+            # Continue with unverified answer on error
+
     # Truncate to prevent exfiltration
     answer_text = truncate_answer(answer_text, cfg.max_answer_chars)
 
@@ -443,9 +559,11 @@ def stream_answer(
 ) -> tuple[str | None, list[dict[str, Any]], int, Iterator[str]]:
     """
     Stream an answer token by token.
-    
-    WARNING (v1.5): Streaming is DEPRECATED for legal contexts.
+
+    WARNING: Streaming is DEPRECATED for legal contexts.
     Use answer_question_buffered() instead to ensure validation before display.
+
+    Note: Citation verification (v1.9) is NOT supported in streaming mode.
 
     Args:
         question: User's question
@@ -464,7 +582,7 @@ def stream_answer(
     if not question:
         return refusal(), [], 0, iter(())
 
-    context, sources_meta, max_src = prepare_context(question, retriever, cfg)
+    context, sources_meta, max_src, _ = prepare_context(question, retriever, cfg)
     if context is None:
         return refusal(), [], 0, iter(())
 

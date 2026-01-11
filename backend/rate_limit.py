@@ -48,6 +48,10 @@ def check_rate_limit(
         if not allowed:
             st.warning(f"Too many requests. Retry in {retry}s")
     """
+    # Edge case: zero or negative max_requests always blocks
+    if max_requests <= 0:
+        return False, max(1, window_seconds)
+
     now = time.time()
     dq: Deque[float] | None = session_state.get(key)
     if dq is None:

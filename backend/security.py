@@ -18,7 +18,7 @@ For production, consider:
 - Semantic similarity to known attacks
 - Logging of blocked attempts for analysis
 
-SECURITY (v1.5):
+SECURITY:
 - This is defense-in-depth layer 1 (input sanitization)
 - Layer 2 is the hardened system prompt in rag_core.py
 - Layer 3 is structured output validation

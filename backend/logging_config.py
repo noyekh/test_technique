@@ -7,7 +7,7 @@ Design decisions:
 - INFO level default: Verbose enough for debugging, not too noisy
 - Idempotent setup: Safe to call multiple times
 
-SECURITY (v1.5):
+SECURITY:
 - Application logs should NOT contain sensitive content
 - Use audit_log.py for structured audit events
 - Never log prompts, questions, or responses here

@@ -1,7 +1,7 @@
 """
 Documents page - Upload, manage, and vectorize documents.
 
-SECURITY (v1.5):
+SECURITY:
 - Audit logging for all operations
 - Verified end-to-end deletion
 - Session ID tracking
@@ -31,7 +31,7 @@ db.init_db()
 
 logger = logging.getLogger(__name__)
 
-st.set_page_config(page_title="Documents", page_icon="📄", layout="wide")
+# Note: st.set_page_config() est dans main.py (st.navigation)
 username = require_auth()  # Bloque si non authentifié
 st.title("📄 Gestion des documents")
 
@@ -39,8 +39,22 @@ with st.sidebar:
     render_logout()
     st.caption(f"Connecté: {username}")
 
+# Check required API keys (show error only if missing)
 if not os.getenv("OPENAI_API_KEY"):
-    st.warning("OPENAI_API_KEY manquant : l'indexation (embeddings) échouera.")
+    st.error("❌ OPENAI_API_KEY manquante — l'indexation échouera.")
+if not os.getenv("VOYAGE_API_KEY"):
+    st.error("❌ VOYAGE_API_KEY manquante — l'indexation échouera.")
+
+# Technical details in expander
+with st.expander("⚙️ Paramètres techniques", expanded=False):
+    openai_key = os.getenv("OPENAI_API_KEY")
+    voyage_key = os.getenv("VOYAGE_API_KEY")
+    st.caption(f"OpenAI: {'✅ configurée' if openai_key else '❌ manquante'}")
+    st.caption(f"Voyage: {'✅ configurée' if voyage_key else '❌ manquante'}")
+    st.caption(f"Taille max: {settings.max_file_size_mb} MB")
+    if st.button("🔄 Vider le cache", use_container_width=True):
+        st.cache_resource.clear()
+        st.rerun()
 
 # Initialize session ID for audit
 if "session_id" not in st.session_state:
@@ -48,24 +62,40 @@ if "session_id" not in st.session_state:
 
 session_id = st.session_state["session_id"]
 
+# Track last successful upload to prevent re-processing after rerun
+if "last_uploaded_sha256" not in st.session_state:
+    st.session_state["last_uploaded_sha256"] = None
+
+# Show success message if we just uploaded
+if "upload_success_msg" in st.session_state:
+    st.success(st.session_state.pop("upload_success_msg"))
+
 MAX_FILE_SIZE = settings.max_file_size_mb * 1024 * 1024
 
-# File upload section
-uploaded = st.file_uploader(
-    "Uploader (.txt, .csv, .html)", type=["txt", "csv", "html", "htm"]
+# File upload section - key changes after successful upload to clear widget
+upload_key = st.session_state.get("upload_key", "uploader_0")
+uploaded_files = st.file_uploader(
+    "Uploader (.txt, .csv, .html)",
+    type=["txt", "csv", "html", "htm"],
+    key=upload_key,
+    accept_multiple_files=True,
 )
 
-if uploaded:
+# Process all uploaded files
+success_count = 0
+success_messages = []
+
+for uploaded in uploaded_files:
     request_id = generate_request_id()
-    
+
     try:
         raw = uploaded.getvalue()
 
         # Check file size
         if len(raw) > MAX_FILE_SIZE:
             mb = len(raw) // 1024 // 1024
-            st.error(f"Fichier trop volumineux ({mb} MB > {settings.max_file_size_mb} MB)")
-            st.stop()
+            st.error(f"❌ {uploaded.name}: Trop volumineux ({mb} MB > {settings.max_file_size_mb} MB)")
+            continue
 
         # Save file to disk
         digest, stored_path, ext, size_bytes = save_upload(uploaded.name, raw)
@@ -75,46 +105,51 @@ if uploaded:
         if not ok_mime:
             try:
                 stored_path.unlink(missing_ok=True)
-            except OSError as e:
-                logger.warning(
-                    "Failed to cleanup rejected upload",
-                    extra={"error_code": "CLEANUP_ERROR"},
-                )
-            st.error(f"Type MIME invalide (ext .{ext}). Détecté: {detected}")
-            st.stop()
+            except OSError:
+                pass
+            st.error(f"❌ {uploaded.name}: Type MIME invalide. Détecté: {detected}")
+            continue
 
         # Check for duplicates
         existing = db.get_document_by_sha256(digest)
         if existing:
             try:
                 stored_path.unlink(missing_ok=True)
-            except OSError as e:
-                logger.warning(
-                    "Failed to cleanup duplicate upload",
-                    extra={"error_code": "CLEANUP_ERROR"},
-                )
-            st.warning("Ce document (même contenu) est déjà indexé. Upload ignoré.")
-            st.stop()
+            except OSError:
+                pass
+            st.warning(f"⚠️ {uploaded.name}: Déjà indexé (même contenu). Ignoré.")
+            continue
 
         # Parse and chunk
         text = read_to_text(ext, raw)
         chunks = chunk_text(text)
 
-        # Add to database
-        doc_id = db.add_document(
+        # Generate doc_id before DB insertion for vectorization
+        doc_id = uuid.uuid4().hex
+
+        # Vectorize FIRST (before DB insert) - fail fast
+        with st.status(f"Vectorisation de {uploaded.name}…", expanded=False):
+            try:
+                chunk_ids = add_doc_chunks(doc_id, uploaded.name, chunks)
+            except Exception as vec_error:
+                # Cleanup file on vectorization failure
+                try:
+                    stored_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                st.error(f"❌ {uploaded.name}: Erreur vectorisation - {vec_error}")
+                continue
+
+        # Add to database AFTER successful vectorization
+        db.add_document_with_id(
+            doc_id=doc_id,
             original_name=uploaded.name,
             stored_path=str(stored_path),
             ext=ext,
             sha256=digest,
             size_bytes=size_bytes,
         )
-
-        # Vectorize
-        with st.status("Vectorisation / indexation…", expanded=True):
-            chunk_ids = add_doc_chunks(doc_id, uploaded.name, chunks)
-            db.add_chunks(doc_id, chunk_ids)
-            st.write(f"- Fichier: `{uploaded.name}`")
-            st.write(f"- Chunks indexés: {len(chunk_ids)}")
+        db.add_chunks(doc_id, chunk_ids)
 
         # Audit log (no content!)
         log_upload(
@@ -124,16 +159,23 @@ if uploaded:
             chunk_ids=chunk_ids,
         )
 
-        st.success("Document indexé ✅")
         logger.info(
             "Uploaded and indexed document",
             extra={"doc_id": doc_id, "chunks": len(chunk_ids)},
         )
-        st.rerun()
+
+        success_count += 1
+        success_messages.append(f"'{uploaded.name}' ({len(chunk_ids)} chunks)")
 
     except Exception as e:
         logger.exception("Ingestion failed", extra={"error_code": "INGESTION_ERROR"})
-        st.error(f"Erreur ingestion: {e}")
+        st.error(f"❌ {uploaded.name}: {e}")
+
+# After processing all files, show summary and clear uploader
+if success_count > 0:
+    st.session_state["upload_success_msg"] = f"✅ {success_count} document(s) indexé(s): {', '.join(success_messages)}"
+    st.session_state["upload_key"] = f"uploader_{uuid.uuid4().hex[:8]}"
+    st.rerun()
 
 st.divider()
 st.subheader("Documents existants")

@@ -19,14 +19,37 @@ from backend.settings import settings
 
 
 def get_authenticator() -> stauth.Authenticate:
-    """Create authenticator from Streamlit secrets."""
+    """Get or create authenticator, stored in session_state to persist across pages.
+
+    See: https://github.com/mkhorasani/Streamlit-Authenticator/issues/156
+    Storing in session_state prevents DuplicateWidgetId errors and preserves login state.
+    """
+    # Return cached authenticator if exists
+    if "authenticator" in st.session_state:
+        return st.session_state["authenticator"]
+
     config = st.secrets["auth"]
-    return stauth.Authenticate(
-        credentials={"usernames": dict(config["credentials"]["usernames"])},
+
+    # Deep copy credentials to avoid "Secrets does not support item assignment" error
+    # streamlit-authenticator modifies credentials to track failed login attempts
+    credentials = {"usernames": {}}
+    for username, user_data in config["credentials"]["usernames"].items():
+        credentials["usernames"][username] = {
+            "email": user_data.get("email", ""),
+            "name": user_data["name"],
+            "password": user_data["password"],
+        }
+
+    authenticator = stauth.Authenticate(
+        credentials=credentials,
         cookie_name=config["cookie_name"],
         cookie_key=config["cookie_key"],
         cookie_expiry_days=config["cookie_expiry_days"],
     )
+
+    # Cache in session_state
+    st.session_state["authenticator"] = authenticator
+    return authenticator
 
 
 def require_auth() -> str:
@@ -38,7 +61,14 @@ def require_auth() -> str:
         return "anonymous"
 
     authenticator = get_authenticator()
-    name, status, username = authenticator.login(location="main")
+
+    # Call login() - this renders the form AND checks cookies
+    authenticator.login(location="main")
+
+    # Check authentication status from session_state (set by authenticator)
+    status = st.session_state.get("authentication_status")
+    username = st.session_state.get("username")
+    name = st.session_state.get("name")
 
     session_id = st.session_state.get("session_id", "unknown")
     request_id = generate_request_id()
@@ -56,7 +86,6 @@ def require_auth() -> str:
         log_auth(request_id, session_id, "login_success", username)
         st.session_state["auth_logged"] = True
 
-    st.session_state["username"] = username
     return username
 
 

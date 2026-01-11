@@ -3,7 +3,7 @@ Document management service.
 
 Handles complete document lifecycle including vectorstore, filesystem, and database.
 
-SECURITY (v1.5):
+SECURITY:
 - End-to-end deletion with verification
 - Audit trail for all operations
 - Tombstone records for GDPR compliance

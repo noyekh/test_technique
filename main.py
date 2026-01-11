@@ -1,38 +1,23 @@
+"""
+Point d'entrée Streamlit avec navigation personnalisée.
+
+Le cahier des charges demande 2 pages :
+- Page 1 : Chatbot
+- Page 2 : Documents
+
+st.navigation() permet de contrôler exactement les pages affichées
+dans la sidebar (Streamlit >= 1.36).
+"""
+
 import streamlit as st
-from dotenv import load_dotenv
-
-from backend.auth import require_auth, render_logout
-from backend.db import init_db
-from backend.logging_config import setup_logging
-
-load_dotenv()
-setup_logging()
-init_db()
 
 st.set_page_config(page_title="Legal RAG PoC", page_icon="⚖️", layout="wide")
-username = require_auth()
 
-st.title("⚖️ Legal RAG PoC — Cabinet Emilia Parenti")
-
-with st.sidebar:
-    render_logout()
-    st.caption(f"Connecté: {username}")
-
-st.markdown(
-    """
-PoC interne : chatbot **strictement basé sur les documents uploadés**.
-
-- Va dans **Documents** pour uploader / supprimer et vectoriser
-- Puis dans **Chatbot** pour poser des questions
-
-### Architecture v1.8
-
-- ✅ **Authentification** : login/password avec audit
-- ✅ **Pas de streaming** : réponses validées avant affichage
-- ✅ **Logs minimalistes** : politique allowlist stricte
-- ✅ **Suppression vérifiable** : audit trail RGPD
-- ✅ **Prompt durci** : documents traités comme données non fiables
-"""
+# Navigation personnalisée : seulement 2 pages visibles
+pages = st.navigation(
+    [
+        st.Page("pages/1_chat.py", title="Chatbot", icon="💬", default=True),
+        st.Page("pages/2_documents.py", title="Documents", icon="📄"),
+    ]
 )
-
-st.info("Conseil : uploade 2–3 documents, puis teste une question précise.")
+pages.run()

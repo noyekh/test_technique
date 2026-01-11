@@ -9,9 +9,13 @@ Pages can continue using:
 
 without knowing about the internal refactoring.
 
-v1.5 Changes:
-- Added answer_question_buffered() as the recommended entry point
+Design:
+- answer_question_buffered() is the recommended entry point
 - stream_answer_tokens() is deprecated for legal contexts
+
+v1.9 Changes:
+- Added citation verification (verify_citation_fn)
+- Pipeline: Query → Multi-query → Hybrid → Rerank → LLM → Citation verification
 """
 
 from __future__ import annotations
@@ -35,6 +39,7 @@ from .rag_runtime import (
     chunk_text,
     add_doc_chunks,
 )
+from .citation_verifier import verify_answer
 from .security import sanitize_question
 from .settings import settings
 
@@ -51,12 +56,41 @@ __all__ = [
 ]
 
 
+def _citation_verify_fn(
+    answer: str,
+    sources_meta: list[dict[str, Any]],
+    source_texts: list[str],
+    level: str,
+    threshold: float,
+    min_words: int,
+) -> str:
+    """
+    Citation verification wrapper for rag_core.
+
+    v1.9: Verifies each citation against source documents.
+    """
+    result = verify_answer(
+        answer_text=answer,
+        sources_meta=sources_meta,
+        source_texts=source_texts,
+        embed_fn=None,  # Semantic check requires embeddings, not yet implemented
+        verification_level=level,
+        semantic_threshold=threshold,
+        min_overlap_words=min_words,
+    )
+    return result.verified_answer
+
+
 def answer_question_buffered(question: str) -> tuple[str, list[dict[str, Any]], list[str], list[str]]:
     """
     Answer a question using RAG with structured output and full validation.
-    
-    This is the RECOMMENDED entry point for v1.5.
+
+    This is the RECOMMENDED entry point (non-streaming, fully validated).
     Returns complete audit information without exposing any response until validated.
+
+    v1.9 Pipeline:
+    Query → Multi-query (3 variants) → Hybrid BM25+Dense (top_k=100) →
+    Rerank (top_n=15) → LLM → Citation verification
 
     Args:
         question: User's question
@@ -75,6 +109,7 @@ def answer_question_buffered(question: str) -> tuple[str, list[dict[str, Any]], 
         retriever=retriever_fn,
         llm_invoke_structured=llm_invoke_structured,
         cfg=cfg,
+        citation_verify_fn=_citation_verify_fn if settings.citation_verification_enabled else None,
     )
 
 
@@ -108,7 +143,7 @@ def stream_answer_tokens(
     """
     Stream an answer token by token.
     
-    WARNING (v1.5): This function is DEPRECATED for legal contexts.
+    WARNING: This function is DEPRECATED for legal contexts.
     Use answer_question_buffered() instead to ensure validation before display.
 
     Args:

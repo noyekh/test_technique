@@ -13,7 +13,7 @@ Tables:
 - chunks: mapping doc_id -> chunk_ids for vectorstore sync
 - conversations: chat sessions
 - messages: chat history per conversation
-- deletions: tombstone records for GDPR audit trail (v1.5)
+- deletions: tombstone records for GDPR audit trail
 
 For production, consider:
 - Connection pooling (sqlite3 doesn't need it, but PostgreSQL would)
@@ -23,10 +23,11 @@ For production, consider:
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import uuid
 from datetime import datetime, timezone
-from typing import Iterable, Optional
+from typing import Any, Iterable, Optional
 
 from .settings import SQLITE_PATH
 
@@ -97,7 +98,8 @@ def init_db() -> None:
     CREATE TABLE IF NOT EXISTS conversations (
         conv_id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
     );
     """
     )
@@ -115,7 +117,7 @@ def init_db() -> None:
     """
     )
     
-    # v1.5: Deletion tombstones for GDPR audit trail
+    # Deletion tombstones for GDPR audit trail
     cur.execute(
         """
     CREATE TABLE IF NOT EXISTS deletions (
@@ -133,6 +135,22 @@ def init_db() -> None:
     cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_conv_id ON messages(conv_id);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_deletions_doc_id ON deletions(doc_id);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_deletions_sha256 ON deletions(sha256);")
+
+    # Migration: add updated_at to existing conversations table
+    try:
+        cur.execute("ALTER TABLE conversations ADD COLUMN updated_at TEXT")
+        cur.execute("UPDATE conversations SET updated_at = created_at WHERE updated_at IS NULL")
+    except Exception:
+        pass  # Column already exists
+
+    # Index on updated_at (after migration)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_conversations_updated ON conversations(updated_at);")
+
+    # Migration: add sources_json to existing messages table (v1.10)
+    try:
+        cur.execute("ALTER TABLE messages ADD COLUMN sources_json TEXT")
+    except Exception:
+        pass  # Column already exists
 
     conn.commit()
     conn.close()
@@ -157,6 +175,43 @@ def add_document(
         Generated document ID
     """
     doc_id = _id()
+    conn = connect()
+    conn.execute(
+        """
+        INSERT INTO documents(doc_id, original_name, stored_path, ext, sha256, size_bytes, created_at)
+        VALUES (?,?,?,?,?,?,?)
+        """,
+        (doc_id, original_name, stored_path, ext, sha256, size_bytes, _utcnow()),
+    )
+    conn.commit()
+    conn.close()
+    return doc_id
+
+
+def add_document_with_id(
+    doc_id: str,
+    original_name: str,
+    stored_path: str,
+    ext: str,
+    sha256: str,
+    size_bytes: int,
+) -> str:
+    """
+    Add a new document with a pre-generated ID.
+
+    Used when vectorization must happen before DB insertion (fail-fast pattern).
+
+    Args:
+        doc_id: Pre-generated document ID
+        original_name: Original filename as uploaded
+        stored_path: Path where file is stored on disk
+        ext: File extension (without dot)
+        sha256: Content hash for deduplication
+        size_bytes: File size in bytes
+
+    Returns:
+        The same document ID
+    """
     conn = connect()
     conn.execute(
         """
@@ -275,7 +330,7 @@ def delete_document_rows(doc_id: str) -> None:
     conn.close()
 
 
-# ---------------- deletions (v1.5 tombstones) ----------------
+# ---------------- deletions (tombstones) ----------------
 
 def add_deletion_tombstone(doc_id: str, sha256: str, chunk_count: int) -> str:
     """
@@ -349,24 +404,26 @@ def list_deletions(limit: int = 100):
 def ensure_default_conversation() -> str:
     """
     Ensure at least one conversation exists.
-    
+
     Creates a default conversation if none exists.
-    
+    Returns the most recently used conversation (by updated_at).
+
     Returns:
-        ID of the first/default conversation
+        ID of the most recent conversation
     """
     conn = connect()
     row = conn.execute(
-        "SELECT conv_id FROM conversations ORDER BY created_at ASC LIMIT 1"
+        "SELECT conv_id FROM conversations ORDER BY updated_at DESC LIMIT 1"
     ).fetchone()
     if row:
         conn.close()
         return row["conv_id"]
 
     conv_id = _id()
+    now = _utcnow()
     conn.execute(
-        "INSERT INTO conversations(conv_id, title, created_at) VALUES (?,?,?)",
-        (conv_id, "Conversation 1", _utcnow()),
+        "INSERT INTO conversations(conv_id, title, created_at, updated_at) VALUES (?,?,?,?)",
+        (conv_id, "Nouvelle conversation", now, now),
     )
     conn.commit()
     conn.close()
@@ -376,19 +433,20 @@ def ensure_default_conversation() -> str:
 def new_conversation(title: Optional[str] = None) -> str:
     """
     Create a new conversation.
-    
+
     Args:
-        title: Optional title, defaults to "Conversation {id[:6]}"
-        
+        title: Optional title, defaults to "Nouvelle conversation"
+
     Returns:
         Generated conversation ID
     """
     conv_id = _id()
-    title = title or f"Conversation {conv_id[:6]}"
+    title = title or "Nouvelle conversation"
+    now = _utcnow()
     conn = connect()
     conn.execute(
-        "INSERT INTO conversations(conv_id, title, created_at) VALUES (?,?,?)",
-        (conv_id, title, _utcnow()),
+        "INSERT INTO conversations(conv_id, title, created_at, updated_at) VALUES (?,?,?,?)",
+        (conv_id, title, now, now),
     )
     conn.commit()
     conn.close()
@@ -397,49 +455,143 @@ def new_conversation(title: Optional[str] = None) -> str:
 
 def list_conversations():
     """
-    List all conversations, most recent first.
-    
+    List all conversations, most recently used first.
+
     Returns:
         List of conversation Row objects
     """
     conn = connect()
-    rows = conn.execute("SELECT * FROM conversations ORDER BY created_at DESC").fetchall()
+    rows = conn.execute("SELECT * FROM conversations ORDER BY updated_at DESC").fetchall()
     conn.close()
     return rows
 
 
-def add_message(conv_id: str, role: str, content: str) -> None:
+def add_message(
+    conv_id: str,
+    role: str,
+    content: str,
+    sources: Optional[list[dict[str, Any]]] = None,
+) -> None:
     """
     Add a message to a conversation.
-    
+
+    Updates the conversation's updated_at timestamp.
+    Auto-generates a title from the first user message if title is generic.
+
     Args:
         conv_id: Conversation ID
         role: Message role ("user" or "assistant")
         content: Message content
+        sources: Optional list of source metadata dicts (for assistant messages)
+    """
+    now = _utcnow()
+    conn = connect()
+
+    # Serialize sources to JSON if provided
+    sources_json = json.dumps(sources) if sources else None
+
+    # Insert the message
+    conn.execute(
+        "INSERT INTO messages(msg_id, conv_id, role, content, sources_json, created_at) VALUES (?,?,?,?,?,?)",
+        (_id(), conv_id, role, content, sources_json, now),
+    )
+
+    # Update conversation's updated_at
+    conn.execute(
+        "UPDATE conversations SET updated_at = ? WHERE conv_id = ?",
+        (now, conv_id),
+    )
+
+    # Auto-title: if this is the first user message and title is generic
+    if role == "user":
+        row = conn.execute(
+            "SELECT title FROM conversations WHERE conv_id = ?", (conv_id,)
+        ).fetchone()
+        if row and row["title"] in ("Nouvelle conversation", "Conversation 1"):
+            # Generate title from first ~50 chars of message
+            title = content[:50].strip()
+            if len(content) > 50:
+                title = title.rsplit(" ", 1)[0] + "..."
+            conn.execute(
+                "UPDATE conversations SET title = ? WHERE conv_id = ?",
+                (title, conv_id),
+            )
+
+    conn.commit()
+    conn.close()
+
+
+def get_messages(conv_id: str) -> list[dict[str, Any]]:
+    """
+    Get all messages in a conversation.
+
+    Args:
+        conv_id: Conversation ID
+
+    Returns:
+        List of message dicts with keys: role, content, sources, created_at
+        Sources is parsed from JSON (None if not present)
+    """
+    conn = connect()
+    rows = conn.execute(
+        "SELECT role, content, sources_json, created_at FROM messages WHERE conv_id=? ORDER BY created_at ASC",
+        (conv_id,),
+    ).fetchall()
+    conn.close()
+
+    # Convert to dicts with parsed sources
+    result = []
+    for row in rows:
+        sources = None
+        if row["sources_json"]:
+            try:
+                sources = json.loads(row["sources_json"])
+            except json.JSONDecodeError:
+                pass
+        result.append({
+            "role": row["role"],
+            "content": row["content"],
+            "sources": sources,
+            "created_at": row["created_at"],
+        })
+    return result
+
+
+def update_conversation_title(conv_id: str, title: str) -> None:
+    """
+    Update a conversation's title.
+
+    Args:
+        conv_id: Conversation ID
+        title: New title
     """
     conn = connect()
     conn.execute(
-        "INSERT INTO messages(msg_id, conv_id, role, content, created_at) VALUES (?,?,?,?,?)",
-        (_id(), conv_id, role, content, _utcnow()),
+        "UPDATE conversations SET title = ? WHERE conv_id = ?",
+        (title, conv_id),
     )
     conn.commit()
     conn.close()
 
 
-def get_messages(conv_id: str):
+def delete_conversation(conv_id: str) -> bool:
     """
-    Get all messages in a conversation.
-    
+    Delete a conversation and all its messages.
+
+    CASCADE delete automatically removes associated messages.
+
     Args:
-        conv_id: Conversation ID
-        
+        conv_id: Conversation ID to delete
+
     Returns:
-        List of message Row objects in chronological order
+        True if conversation was deleted, False if not found
     """
     conn = connect()
-    rows = conn.execute(
-        "SELECT role, content, created_at FROM messages WHERE conv_id=? ORDER BY created_at ASC",
+    cursor = conn.execute(
+        "DELETE FROM conversations WHERE conv_id = ?",
         (conv_id,),
-    ).fetchall()
+    )
+    deleted = cursor.rowcount > 0
+    conn.commit()
     conn.close()
-    return rows
+    return deleted
