@@ -31,18 +31,18 @@ streamlit run main.py
 ### Alternative : Docker
 
 ```bash
-# Option 1 : Docker Compose (recommandé)
-docker-compose up --build
+# 1. Configuration (mêmes prérequis que Python)
+cp .env.example .env
+# Éditer .env avec vos clés OPENAI_API_KEY et VOYAGE_API_KEY
 
-# Option 2 : Docker seul
-docker build -t legal-rag-poc .
-docker run -p 8501:8501 --env-file .env \
-  -v $(pwd)/.streamlit:/app/.streamlit:ro \
-  -v $(pwd)/data:/app/data \
-  legal-rag-poc
+mkdir -p .streamlit
+cp secrets.example.toml .streamlit/secrets.toml
+
+# 2. Lancement
+docker-compose up --build
 ```
 
-Accéder à http://localhost:8501
+Accéder à http://localhost:8501 → Login `admin` / `admin123`
 
 ---
 
