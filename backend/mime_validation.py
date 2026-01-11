@@ -33,8 +33,8 @@ ALLOWED_EXTS = {"txt", "csv", "html", "htm"}
 ALLOWED_MIME_BY_EXT = {
     "txt": {"text/plain"},
     "csv": {"text/csv", "text/plain", "application/vnd.ms-excel"},
-    "html": {"text/html", "application/xhtml+xml"},
-    "htm": {"text/html", "application/xhtml+xml"},
+    "html": {"text/html", "application/xhtml+xml", "text/plain"},  # text/plain: simple HTML without doctype
+    "htm": {"text/html", "application/xhtml+xml", "text/plain"},
 }
 
 
