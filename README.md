@@ -28,6 +28,48 @@ streamlit run main.py
 
 **Workflow** : Documents → uploader fichiers → Chatbot → poser questions
 
+### Alternative : Docker
+
+```bash
+# Option 1 : Docker Compose (recommandé)
+docker-compose up --build
+
+# Option 2 : Docker seul
+docker build -t legal-rag-poc .
+docker run -p 8501:8501 --env-file .env \
+  -v $(pwd)/.streamlit:/app/.streamlit:ro \
+  -v $(pwd)/data:/app/data \
+  legal-rag-poc
+```
+
+Accéder à http://localhost:8501
+
+---
+
+## Performance
+
+Benchmarks sur 5 requêtes juridiques types (pipeline v1.9 complet, 3 runs/requête):
+
+| Métrique | Valeur | Détail |
+|----------|--------|--------|
+| **Latence moyenne** | ~5s | Multi-query (3 variants) + Rerank + LLM |
+| **Latence P50** | ~4.6s | Médiane sur 15 runs |
+| **Taux de réponse** | 80% | Refus si qualité insuffisante (seuil 0.3) |
+| **Sources/réponse** | 3-4 | Après reranking top-15 |
+
+> **Note**: Latence dominée par les appels API séquentiels (OpenAI × 2 + Voyage × 2 par requête).
+> Le taux de réponse augmente avec plus de documents indexés.
+
+<details>
+<summary>📊 Reproduire les benchmarks</summary>
+
+```bash
+# Prérequis: documents indexés + clés API configurées
+python scripts/benchmark.py
+```
+
+</details>
+
 ---
 
 ## Avertissements importants
@@ -208,6 +250,7 @@ streamlit run main.py
 | Citation verif | **presence level** | semantic level | **Inclus v1.9** |
 | Vector DB | ChromaDB | Qdrant Cloud / Pinecone | Migration |
 | Auth | streamlit-authenticator | Azure AD / Auth0 | Infra SSO |
+| Déploiement | **Docker inclus** | Kubernetes / Cloud Run | **Prêt** |
 | HTTPS | Non | Obligatoire | Nginx/Caddy |
 
 ## Tests
@@ -275,12 +318,17 @@ legal-rag-poc-v1.10/
 │   ├── mime_validation.py    # Validation MIME
 │   └── logging_config.py     # Config logging app
 ├── tests/
+├── scripts/
+│   └── benchmark.py          # Benchmarks de performance
 ├── data/                     # (gitignored)
 ├── .streamlit/
 │   └── secrets.toml          # Credentials auth (gitignored)
 ├── requirements.txt
 ├── .env.example
 ├── secrets.example.toml      # Copier vers .streamlit/secrets.toml
+├── Dockerfile                # Container production-ready
+├── docker-compose.yml        # Orchestration simplifiée
+├── .dockerignore
 ├── .gitignore
 └── README.md
 ```

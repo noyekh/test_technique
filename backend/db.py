@@ -140,7 +140,7 @@ def init_db() -> None:
     try:
         cur.execute("ALTER TABLE conversations ADD COLUMN updated_at TEXT")
         cur.execute("UPDATE conversations SET updated_at = created_at WHERE updated_at IS NULL")
-    except Exception:
+    except sqlite3.OperationalError:
         pass  # Column already exists
 
     # Index on updated_at (after migration)
@@ -149,7 +149,7 @@ def init_db() -> None:
     # Migration: add sources_json to existing messages table (v1.10)
     try:
         cur.execute("ALTER TABLE messages ADD COLUMN sources_json TEXT")
-    except Exception:
+    except sqlite3.OperationalError:
         pass  # Column already exists
 
     conn.commit()
@@ -595,3 +595,63 @@ def delete_conversation(conv_id: str) -> bool:
     conn.commit()
     conn.close()
     return deleted
+
+
+def delete_last_assistant_message(conv_id: str) -> Optional[str]:
+    """
+    Delete the last assistant message in a conversation.
+
+    Used for the "Regenerate" feature - removes the last assistant response
+    so it can be regenerated.
+
+    Args:
+        conv_id: Conversation ID
+
+    Returns:
+        The msg_id of the deleted message, or None if no assistant message found
+    """
+    conn = connect()
+    # Find the last assistant message
+    row = conn.execute(
+        """
+        SELECT msg_id FROM messages
+        WHERE conv_id = ? AND role = 'assistant'
+        ORDER BY created_at DESC LIMIT 1
+        """,
+        (conv_id,),
+    ).fetchone()
+
+    if not row:
+        conn.close()
+        return None
+
+    msg_id = row["msg_id"]
+    conn.execute("DELETE FROM messages WHERE msg_id = ?", (msg_id,))
+    conn.commit()
+    conn.close()
+    return msg_id
+
+
+def get_last_user_message(conv_id: str) -> Optional[str]:
+    """
+    Get the last user message content in a conversation.
+
+    Used for the "Regenerate" feature - retrieves the question to re-ask.
+
+    Args:
+        conv_id: Conversation ID
+
+    Returns:
+        The content of the last user message, or None if not found
+    """
+    conn = connect()
+    row = conn.execute(
+        """
+        SELECT content FROM messages
+        WHERE conv_id = ? AND role = 'user'
+        ORDER BY created_at DESC LIMIT 1
+        """,
+        (conv_id,),
+    ).fetchone()
+    conn.close()
+    return row["content"] if row else None

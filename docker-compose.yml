@@ -1,0 +1,30 @@
+# Legal RAG PoC — Docker Compose
+#
+# Usage:
+#   docker-compose up --build
+#
+# Prérequis:
+#   - .env avec OPENAI_API_KEY et VOYAGE_API_KEY
+#   - .streamlit/secrets.toml avec credentials auth
+
+services:
+  app:
+    build: .
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    volumes:
+      # Secrets auth (read-only)
+      - ./.streamlit:/app/.streamlit:ro
+      # Persistance données
+      - ./data:/app/data
+      # Persistance logs
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

@@ -21,6 +21,7 @@ For production, consider:
 
 from __future__ import annotations
 
+import html
 import pandas as pd
 from bs4 import BeautifulSoup
 
@@ -85,6 +86,8 @@ def read_to_text(ext: str, raw: bytes) -> str:
         for tag in soup(["script", "style", "nav", "footer", "header", "aside", "noscript"]):
             tag.decompose()
         text = soup.get_text(separator="\n")
+        # Decode HTML entities (&amp; -> &, &lt; -> <, etc.)
+        text = html.unescape(text)
         return normalize_text(text)
 
     raise ValueError(f"Extension non supportée: .{ext}")

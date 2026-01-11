@@ -1,19 +1,47 @@
+# Python
 __pycache__/
 *.pyc
-.coverage
-htmlcov/
-.venv/
-venv/
-.env
-.streamlit/
-.claude/
-data/
-!data/.gitkeep
-.DS_Store
-Thumbs.db
-.pytest_cache/
-.ruff_cache/
-.mypy_cache/
+*.pyo
 *.egg-info/
 dist/
 build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment
+.env
+*.env.local
+
+# Streamlit
+.streamlit/
+
+# Data (SQLite, ChromaDB, uploads)
+data/
+!data/.gitkeep
+
+# Logs
+logs/
+*.log
+
+# Testing & Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+benchmark_results.json
+
+# Linting
+.ruff_cache/
+.mypy_cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db

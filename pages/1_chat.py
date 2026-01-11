@@ -152,15 +152,29 @@ session_id = st.session_state["session_id"]
 
 # Display existing messages
 msgs = db.get_messages(conv_id)
-for m in msgs:
+for idx, m in enumerate(msgs):
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
         # Show sources for assistant messages (if available)
         if m["role"] == "assistant" and m.get("sources"):
             _display_sources(m["sources"])
+        # Show regenerate button for the last assistant message only
+        if m["role"] == "assistant" and idx == len(msgs) - 1:
+            if st.button("🔄 Régénérer", key="regen_btn", help="Supprimer cette réponse et en générer une nouvelle"):
+                db.delete_last_assistant_message(conv_id)
+                last_q = db.get_last_user_message(conv_id)
+                if last_q:
+                    st.session_state["_regen_prompt"] = last_q
+                st.rerun()
 
 # Chat input
 prompt = st.chat_input("Pose ta question (réponse uniquement sur documents)…")
+
+# Handle regeneration (prompt stored from button click)
+regen_prompt = st.session_state.pop("_regen_prompt", None)
+if regen_prompt:
+    prompt = regen_prompt
+    # Don't re-add user message since it already exists
 
 if prompt:
     request_id = generate_request_id()
@@ -177,10 +191,11 @@ if prompt:
         log_error(request_id, session_id, "RATE_LIMITED")
         st.stop()
 
-    # Save and display user message
-    db.add_message(conv_id, "user", prompt)
-    with st.chat_message("user"):
-        st.markdown(prompt)
+    # Save and display user message (skip if regenerating)
+    if not regen_prompt:
+        db.add_message(conv_id, "user", prompt)
+        with st.chat_message("user"):
+            st.markdown(prompt)
 
     # Generate response (BUFFERED - no streaming to user)
     with st.chat_message("assistant"):

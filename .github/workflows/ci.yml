@@ -122,3 +122,21 @@ jobs:
         run: |
           python -c "from backend import db, rag, auth, settings; print('Imports OK')"
           python -c "from backend.rag_core import RagConfig, answer_question; print('RAG core OK')"
+
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: legal-rag-poc:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

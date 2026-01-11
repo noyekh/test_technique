@@ -1,0 +1,50 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment and secrets (mount at runtime)
+.env
+.streamlit/secrets.toml
+
+# Data (mount as volume or regenerate)
+data/
+logs/
+*.sqlite
+
+# Testing and coverage
+.coverage
+.pytest_cache/
+htmlcov/
+.tox/
+
+# Build artifacts
+*.egg-info/
+dist/
+build/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/
