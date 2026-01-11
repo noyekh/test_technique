@@ -2,6 +2,34 @@
 
 PoC d'un chatbot interne pour cabinet d'avocats avec architecture hexagonale, sécurité renforcée, et retrieval optimisé pour le juridique français.
 
+## Quick Start
+
+**Prérequis** : Python 3.10+ (testé sur 3.12) + clés API [OpenAI](https://platform.openai.com/api-keys) et [Voyage AI](https://dash.voyageai.com/) (gratuit)
+
+```bash
+# 1. Installation
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+# 2. Configuration API
+cp .env.example .env
+# Éditer .env avec vos clés OPENAI_API_KEY et VOYAGE_API_KEY
+
+# 3. Configuration authentification
+mkdir -p .streamlit
+cp secrets.example.toml .streamlit/secrets.toml
+
+# 4. Lancement
+streamlit run main.py
+```
+
+**Connexion** : `admin` / `admin123` ou `avocat1` / `avocat123`
+
+**Workflow** : Documents → uploader fichiers → Chatbot → poser questions
+
+---
+
 ## Avertissements importants
 
 1. **Les données juridiques sont sensibles** — aucune donnée ne doit transiter sans chiffrement (HTTPS)
@@ -76,15 +104,18 @@ Query → Multi-query (3 variants) → Hybrid BM25+Dense (top_k=100) → Rerank 
 
 ## Installation
 
+**Python 3.10+** requis (testé sur 3.12)
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
 cp .env.example .env
-# Édite .env et configure :
-#   - OPENAI_API_KEY (pour LLM)
-#   - VOYAGE_API_KEY (pour embeddings)
+# Éditer .env avec vos clés API
+
+mkdir -p .streamlit
+cp secrets.example.toml .streamlit/secrets.toml
 ```
 
 ### Obtenir les clés API
@@ -249,6 +280,7 @@ legal-rag-poc-v1.10/
 │   └── secrets.toml          # Credentials auth (gitignored)
 ├── requirements.txt
 ├── .env.example
+├── secrets.example.toml      # Copier vers .streamlit/secrets.toml
 ├── .gitignore
 └── README.md
 ```

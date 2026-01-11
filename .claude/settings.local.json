@@ -11,7 +11,8 @@
       "Bash(python -m pytest:*)",
       "Bash(/mnt/c/Users/nbese/AppData/Local/Programs/Python/Python312/python.exe -m py_compile:*)",
       "WebFetch(domain:www.shapeof.ai)",
-      "WebFetch(domain:www.tensorlake.ai)"
+      "WebFetch(domain:www.tensorlake.ai)",
+      "Bash(git rm:*)"
     ]
   }
 }
