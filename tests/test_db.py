@@ -32,9 +32,7 @@ def temp_db():
 def test_init_db_creates_tables(temp_db):
     """Test that init_db creates all required tables."""
     conn = temp_db.connect()
-    cursor = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-    )
+    cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
     tables = {row["name"] for row in cursor.fetchall()}
     conn.close()
 
@@ -351,7 +349,12 @@ def test_get_messages_returns_sources_field(temp_db):
     conv_id = temp_db.new_conversation("Test")
 
     temp_db.add_message(conv_id, "user", "Hello")
-    temp_db.add_message(conv_id, "assistant", "Hi!", sources=[{"i": 1, "source": "test.txt", "score": 0.9, "chunk": 0}])
+    temp_db.add_message(
+        conv_id,
+        "assistant",
+        "Hi!",
+        sources=[{"i": 1, "source": "test.txt", "score": 0.9, "chunk": 0}],
+    )
 
     messages = temp_db.get_messages(conv_id)
 
@@ -461,6 +464,7 @@ def test_add_message_updates_conversation_timestamp(temp_db):
     updated_before = convs_before[0]["updated_at"]
 
     import time
+
     time.sleep(0.01)
 
     temp_db.add_message(conv_id, "user", "New message")

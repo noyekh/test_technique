@@ -45,8 +45,15 @@ def test_audit_event_no_content_fields():
 
     # These should NOT be in the audit event
     forbidden_fields = {
-        "question", "prompt", "answer", "response", "content",
-        "text", "chunk_content", "quote", "filename",
+        "question",
+        "prompt",
+        "answer",
+        "response",
+        "content",
+        "text",
+        "chunk_content",
+        "quote",
+        "filename",
     }
 
     assert field_names.isdisjoint(forbidden_fields), (

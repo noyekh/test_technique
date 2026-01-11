@@ -149,6 +149,7 @@ def embeddings():
     Requires VOYAGE_API_KEY environment variable.
     """
     import os
+
     api_key = os.getenv("VOYAGE_API_KEY")
     if not api_key:
         raise ValueError("VOYAGE_API_KEY environment variable not set")
@@ -233,11 +234,12 @@ def _rebuild_bm25_index() -> None:
 
         if result and result.get("documents"):
             _bm25_docs = [
-                Document(
-                    page_content=doc,
-                    metadata=meta if meta else {}
+                Document(page_content=doc, metadata=meta if meta else {})
+                for doc, meta in zip(
+                    result["documents"],
+                    result.get("metadatas", [{}] * len(result["documents"])),
+                    strict=False,
                 )
-                for doc, meta in zip(result["documents"], result.get("metadatas", [{}] * len(result["documents"])), strict=False)
             ]
             logger.debug(f"BM25 index rebuilt with {len(_bm25_docs)} documents")
         else:
@@ -289,13 +291,13 @@ def _base_retriever_fn(question: str, k: int) -> list[tuple[Document, float]]:
 
         bm25_retriever = BM25Retriever.from_documents(
             _bm25_docs,
-            k=k * 2  # Retrieve more, ensemble will dedupe
+            k=k * 2,  # Retrieve more, ensemble will dedupe
         )
 
         # Ensemble with Reciprocal Rank Fusion
         ensemble = EnsembleRetriever(
             retrievers=[dense_retriever, bm25_retriever],
-            weights=[1 - settings.bm25_weight, settings.bm25_weight]
+            weights=[1 - settings.bm25_weight, settings.bm25_weight],
         )
 
         # Get documents (EnsembleRetriever returns Documents, not scores)
@@ -344,12 +346,8 @@ def _llm_expand_fn(prompt: str) -> list[str]:
         content = response.content if hasattr(response, "content") else str(response)
         variants = [line.strip() for line in content.strip().split("\n") if line.strip()]
         # Filter out numbered prefixes (1., 2., etc.)
-        variants = [
-            re.sub(r"^\d+\.\s*", "", v)
-            for v in variants
-            if v and not v.startswith("#")
-        ]
-        return variants[:settings.multi_query_variants]
+        variants = [re.sub(r"^\d+\.\s*", "", v) for v in variants if v and not v.startswith("#")]
+        return variants[: settings.multi_query_variants]
     except Exception as e:
         logger.warning(f"Query expansion failed: {e}")
         return []
@@ -383,8 +381,7 @@ def contextualize_query(
 
     # Filter to only user/assistant messages with content
     valid_history = [
-        m for m in history
-        if m.get("role") in ("user", "assistant") and m.get("content")
+        m for m in history if m.get("role") in ("user", "assistant") and m.get("content")
     ]
 
     if not valid_history:
@@ -401,36 +398,44 @@ def contextualize_query(
                 chat_history.append(AIMessage(content=content))
 
         # LangChain native prompt template
-        contextualize_prompt = ChatPromptTemplate.from_messages([
-            ("system",
-             "Tu es un reformulateur de questions. "
-             "Étant donné l'historique de conversation et la dernière question, "
-             "reformule cette question pour qu'elle soit autonome et compréhensible sans contexte.\n\n"
-             "RÈGLES:\n"
-             "- Remplace 'le premier', 'celui-ci', 'ça', 'il', 'elle' par les termes explicites\n"
-             "- NE POSE PAS de question de clarification\n"
-             "- NE RÉPONDS PAS à la question\n"
-             "- Retourne UNIQUEMENT la question reformulée, rien d'autre\n"
-             "- Si plusieurs interprétations possibles, choisis la plus probable\n\n"
-             "Exemple:\n"
-             "Historique: 'Quels sont les taux?' → 'Les taux sont 90% et 95%'\n"
-             "Question: 'Explique le premier'\n"
-             "Reformulation: 'Explique le taux de 90%'"),
-            MessagesPlaceholder(variable_name="chat_history"),
-            ("human", "{input}"),
-        ])
+        contextualize_prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    "Tu es un reformulateur de questions. "
+                    "Étant donné l'historique de conversation et la dernière question, "
+                    "reformule cette question pour qu'elle soit autonome et compréhensible sans contexte.\n\n"
+                    "RÈGLES:\n"
+                    "- Remplace 'le premier', 'celui-ci', 'ça', 'il', 'elle' par les termes explicites\n"
+                    "- NE POSE PAS de question de clarification\n"
+                    "- NE RÉPONDS PAS à la question\n"
+                    "- Retourne UNIQUEMENT la question reformulée, rien d'autre\n"
+                    "- Si plusieurs interprétations possibles, choisis la plus probable\n\n"
+                    "Exemple:\n"
+                    "Historique: 'Quels sont les taux?' → 'Les taux sont 90% et 95%'\n"
+                    "Question: 'Explique le premier'\n"
+                    "Reformulation: 'Explique le taux de 90%'",
+                ),
+                MessagesPlaceholder(variable_name="chat_history"),
+                ("human", "{input}"),
+            ]
+        )
 
         # Create chain and invoke
         chain = contextualize_prompt | llm()
-        response = chain.invoke({
-            "chat_history": chat_history,
-            "input": question,
-        })
+        response = chain.invoke(
+            {
+                "chat_history": chat_history,
+                "input": question,
+            }
+        )
 
-        reformulated = response.content.strip() if hasattr(response, "content") else str(response).strip()
+        reformulated = (
+            response.content.strip() if hasattr(response, "content") else str(response).strip()
+        )
 
         # Clean up
-        reformulated = reformulated.strip('"\'')
+        reformulated = reformulated.strip("\"'")
 
         if reformulated and 5 <= len(reformulated) < 500 and reformulated != question:
             logger.info(f"Contextualized: '{question}' -> '{reformulated}'")
@@ -479,9 +484,7 @@ def retriever_fn(question: str, k: int) -> list[tuple[Document, float]]:
 
     # Step 2: Reranking (if enabled)
     if settings.rerank_enabled:
-        logger.info(
-            f"Reranking {len(docs_with_scores)} docs to top {settings.rerank_top_n}"
-        )
+        logger.info(f"Reranking {len(docs_with_scores)} docs to top {settings.rerank_top_n}")
         reranked = rerank_documents(
             query=question,
             documents=docs_with_scores,
@@ -502,30 +505,30 @@ def retriever_fn(question: str, k: int) -> list[tuple[Document, float]]:
 # Preserves Article/Alinéa boundaries critical for legal citation accuracy
 LEGAL_SEPARATORS_FR = [
     # Major structural boundaries (highest priority)
-    "\n\nArticle ",       # Article boundaries (most important for French law)
-    "\n\nARTICLE ",       # Uppercase variant
-    "\n\nArt. ",          # Abbreviated form
-    "\n\nChapitre ",      # Chapter boundaries
+    "\n\nArticle ",  # Article boundaries (most important for French law)
+    "\n\nARTICLE ",  # Uppercase variant
+    "\n\nArt. ",  # Abbreviated form
+    "\n\nChapitre ",  # Chapter boundaries
     "\n\nCHAPITRE ",
-    "\n\nSection ",       # Section boundaries
+    "\n\nSection ",  # Section boundaries
     "\n\nSECTION ",
-    "\n\nTitre ",         # Title boundaries
+    "\n\nTitre ",  # Title boundaries
     "\n\nTITRE ",
-    "\n\nLivre ",         # Book boundaries (Code civil structure)
+    "\n\nLivre ",  # Book boundaries (Code civil structure)
     "\n\nLIVRE ",
-    "\n\nAnnexe ",        # Appendix boundaries
+    "\n\nAnnexe ",  # Appendix boundaries
     "\n\nANNEXE ",
     # Numbered clauses
-    "\n\n§ ",             # Section symbol
-    "\n\n1° ",            # French ordinal numbering (1°, 2°, 3°...)
+    "\n\n§ ",  # Section symbol
+    "\n\n1° ",  # French ordinal numbering (1°, 2°, 3°...)
     "\n\n2° ",
     "\n\n3° ",
     # Standard separators (lower priority)
-    "\n\n",               # Double newline (paragraph)
-    "\n",                 # Single newline (alinéa within article)
-    ". ",                 # Sentence boundary
-    ", ",                 # Clause boundary
-    " ",                  # Word boundary (last resort)
+    "\n\n",  # Double newline (paragraph)
+    "\n",  # Single newline (alinéa within article)
+    ". ",  # Sentence boundary
+    ", ",  # Clause boundary
+    " ",  # Word boundary (last resort)
 ]
 
 
@@ -641,9 +644,9 @@ def llm_invoke_structured(messages: list[dict[str, str]]) -> tuple[str, list[int
         "\n\n--- FORMAT DE RÉPONSE OBLIGATOIRE ---\n"
         "Réponds UNIQUEMENT avec un JSON valide, sans texte avant ou après.\n"
         "Le JSON doit avoir exactement cette structure:\n"
-        '```json\n'
+        "```json\n"
         '{"answer": "Ta réponse avec [Source N] pour chaque affirmation", "citations": [1, 2]}\n'
-        '```\n'
+        "```\n"
         "RÈGLES:\n"
         "- 'answer': string contenant ta réponse avec [Source N] après chaque affirmation\n"
         "- 'citations': liste des numéros de sources utilisées, ex: [1, 2, 3]\n"
@@ -670,7 +673,9 @@ def llm_invoke_structured(messages: list[dict[str, str]]) -> tuple[str, list[int
 
     try:
         raw_response = llm().invoke(llm_messages)
-        raw_content = raw_response.content if hasattr(raw_response, 'content') else str(raw_response)
+        raw_content = (
+            raw_response.content if hasattr(raw_response, "content") else str(raw_response)
+        )
 
         logger.info(
             "LLM raw response",
@@ -696,7 +701,7 @@ def llm_invoke_structured(messages: list[dict[str, str]]) -> tuple[str, list[int
             "LLM parsing failed",
             extra={
                 "error": str(e),
-                "raw_preview": raw_content[:500] if 'raw_content' in dir() else "(no raw)",
+                "raw_preview": raw_content[:500] if "raw_content" in dir() else "(no raw)",
             },
         )
         raise

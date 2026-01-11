@@ -16,11 +16,13 @@ import pytest
 
 class MockSessionState(dict):
     """Dict subclass that allows attribute assignment for mocking st.session_state."""
+
     pass
 
 
 class StopExecution(Exception):
     """Exception to simulate st.stop() behavior."""
+
     pass
 
 
@@ -70,12 +72,9 @@ def mock_streamlit():
                 "cookie_expiry_days": 1,
                 "credentials": {
                     "usernames": {
-                        "testuser": {
-                            "name": "Test User",
-                            "password": "$2b$12$hashedpassword"
-                        }
+                        "testuser": {"name": "Test User", "password": "$2b$12$hashedpassword"}
                     }
-                }
+                },
             }
         }
         # Make st.stop() raise an exception to actually stop execution

@@ -57,6 +57,7 @@ def _display_sources(sources: list[dict] | None, answer: str = "") -> None:
                 else:
                     st.caption(f"📄 [Source {s['i']}] — {s['source']} *(non citée)*")
 
+
 # Note: st.set_page_config() est dans main.py (st.navigation)
 username = require_auth()  # Bloque si non authentifié
 st.title("💬 Cabinet Emilia Parenti — Chatbot RAG")
@@ -107,9 +108,7 @@ with st.sidebar:
         current = options[0]
         st.session_state["active_conv_id"] = current
 
-    selected = st.selectbox(
-        "Choisir", options, index=options.index(current), format_func=_fmt
-    )
+    selected = st.selectbox("Choisir", options, index=options.index(current), format_func=_fmt)
     st.session_state["active_conv_id"] = selected
 
     col_a, col_b = st.columns(2)
@@ -125,7 +124,9 @@ with st.sidebar:
                 db.delete_conversation(selected)
                 # Switch to another conversation
                 remaining = [c for c in convs if c["conv_id"] != selected]
-                st.session_state["active_conv_id"] = remaining[0]["conv_id"] if remaining else db.ensure_default_conversation()
+                st.session_state["active_conv_id"] = (
+                    remaining[0]["conv_id"] if remaining else db.ensure_default_conversation()
+                )
                 st.rerun()
 
     st.divider()
@@ -150,7 +151,9 @@ with st.sidebar:
 
     # Technical details in expander (for developers)
     with st.expander("⚙️ Paramètres techniques"):
-        st.caption(f"Rate limit: {settings.rate_limit_max_requests} req / {settings.rate_limit_window_seconds}s")
+        st.caption(
+            f"Rate limit: {settings.rate_limit_max_requests} req / {settings.rate_limit_window_seconds}s"
+        )
         st.caption(f"Modèle: {settings.openai_chat_model}")
         st.caption("Mode sécurisé: streaming désactivé, réponses validées")
 
@@ -159,6 +162,7 @@ with st.sidebar:
         st.caption("**Vectorstore:**")
         try:
             from backend.rag_runtime import vectorstore
+
             vs = vectorstore()
             collection = vs.get()
             doc_count = len(collection.get("ids", []))
@@ -187,7 +191,11 @@ for idx, m in enumerate(msgs):
             _display_sources(m["sources"], m["content"])
         # Show regenerate button for the last assistant message only
         if m["role"] == "assistant" and idx == len(msgs) - 1:
-            if st.button("🔄 Régénérer", key="regen_btn", help="Supprimer cette réponse et en générer une nouvelle"):
+            if st.button(
+                "🔄 Régénérer",
+                key="regen_btn",
+                help="Supprimer cette réponse et en générer une nouvelle",
+            ):
                 db.delete_last_assistant_message(conv_id)
                 last_q = db.get_last_user_message(conv_id)
                 if last_q:

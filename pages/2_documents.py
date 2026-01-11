@@ -94,7 +94,9 @@ for uploaded in uploaded_files:
         # Check file size
         if len(raw) > MAX_FILE_SIZE:
             mb = len(raw) // 1024 // 1024
-            st.error(f"❌ {uploaded.name}: Trop volumineux ({mb} MB > {settings.max_file_size_mb} MB)")
+            st.error(
+                f"❌ {uploaded.name}: Trop volumineux ({mb} MB > {settings.max_file_size_mb} MB)"
+            )
             continue
 
         # Save file to disk
@@ -173,7 +175,9 @@ for uploaded in uploaded_files:
 
 # After processing all files, show summary and clear uploader
 if success_count > 0:
-    st.session_state["upload_success_msg"] = f"✅ {success_count} document(s) indexé(s): {', '.join(success_messages)}"
+    st.session_state["upload_success_msg"] = (
+        f"✅ {success_count} document(s) indexé(s): {', '.join(success_messages)}"
+    )
     st.session_state["upload_key"] = f"uploader_{uuid.uuid4().hex[:8]}"
     st.rerun()
 
@@ -198,22 +202,16 @@ else:
                     f"Créé: {d['created_at']}"
                 )
         with col2:
-            if st.button(
-                "🗑️ Supprimer", key=f"del_{d['doc_id']}", use_container_width=True
-            ):
+            if st.button("🗑️ Supprimer", key=f"del_{d['doc_id']}", use_container_width=True):
                 try:
                     result = delete_document_complete(d["doc_id"], session_id)
 
                     if result.success:
                         st.success("Supprimé (fichier + DB + index) ✅")
                     elif result.partial:
-                        st.warning(
-                            f"Suppression partielle. Erreurs: {', '.join(result.errors)}"
-                        )
+                        st.warning(f"Suppression partielle. Erreurs: {', '.join(result.errors)}")
                     else:
-                        st.error(
-                            f"Échec suppression. Erreurs: {', '.join(result.errors)}"
-                        )
+                        st.error(f"Échec suppression. Erreurs: {', '.join(result.errors)}")
 
                     st.rerun()
                 except Exception as e:
@@ -231,6 +229,4 @@ with st.expander("🗄️ Historique des suppressions (audit RGPD)"):
         st.info("Aucune suppression enregistrée.")
     else:
         for d in deletions:
-            st.write(
-                f"- **{d['doc_id'][:8]}...** — {d['chunk_count']} chunks — {d['deleted_at']}"
-            )
+            st.write(f"- **{d['doc_id'][:8]}...** — {d['chunk_count']} chunks — {d['deleted_at']}")

@@ -26,6 +26,7 @@ from backend.reranker import (
 @dataclass
 class FakeDoc:
     """Fake document for testing."""
+
     page_content: str
     metadata: dict[str, Any]
 
@@ -33,6 +34,7 @@ class FakeDoc:
 @dataclass
 class FakeRerankResultItem:
     """Fake Voyage rerank result item."""
+
     index: int
     relevance_score: float
 
@@ -40,15 +42,29 @@ class FakeRerankResultItem:
 @dataclass
 class FakeRerankResponse:
     """Fake Voyage rerank API response."""
+
     results: list[FakeRerankResultItem]
 
 
 def create_test_documents():
     """Create test documents for reranking."""
     return [
-        (FakeDoc(page_content="Document about legal contracts", metadata={"source": "contract.txt"}), 0.8),
-        (FakeDoc(page_content="Document about property law", metadata={"source": "property.txt"}), 0.7),
-        (FakeDoc(page_content="Document about tax regulations", metadata={"source": "tax.txt"}), 0.6),
+        (
+            FakeDoc(
+                page_content="Document about legal contracts", metadata={"source": "contract.txt"}
+            ),
+            0.8,
+        ),
+        (
+            FakeDoc(
+                page_content="Document about property law", metadata={"source": "property.txt"}
+            ),
+            0.7,
+        ),
+        (
+            FakeDoc(page_content="Document about tax regulations", metadata={"source": "tax.txt"}),
+            0.6,
+        ),
     ]
 
 

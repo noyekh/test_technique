@@ -145,7 +145,9 @@ def init_db() -> None:
         pass  # Column already exists
 
     # Index on updated_at (after migration)
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_conversations_updated ON conversations(updated_at);")
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_conversations_updated ON conversations(updated_at);"
+    )
 
     # Migration: add sources_json to existing messages table (v1.10)
     try:
@@ -158,6 +160,7 @@ def init_db() -> None:
 
 
 # ---------------- documents ----------------
+
 
 def add_document(
     original_name: str, stored_path: str, ext: str, sha256: str, size_bytes: int
@@ -333,6 +336,7 @@ def delete_document_rows(doc_id: str) -> None:
 
 # ---------------- deletions (tombstones) ----------------
 
+
 def add_deletion_tombstone(doc_id: str, sha256: str, chunk_count: int) -> str:
     """
     Add a tombstone record for a deleted document.
@@ -374,8 +378,7 @@ def get_deletion_tombstone(doc_id: str):
     """
     conn = connect()
     row = conn.execute(
-        "SELECT * FROM deletions WHERE doc_id=? ORDER BY deleted_at DESC LIMIT 1",
-        (doc_id,)
+        "SELECT * FROM deletions WHERE doc_id=? ORDER BY deleted_at DESC LIMIT 1", (doc_id,)
     ).fetchone()
     conn.close()
     return row
@@ -393,14 +396,14 @@ def list_deletions(limit: int = 100):
     """
     conn = connect()
     rows = conn.execute(
-        "SELECT * FROM deletions ORDER BY deleted_at DESC LIMIT ?",
-        (limit,)
+        "SELECT * FROM deletions ORDER BY deleted_at DESC LIMIT ?", (limit,)
     ).fetchall()
     conn.close()
     return rows
 
 
 # ---------------- conversations ----------------
+
 
 def ensure_default_conversation() -> str:
     """
@@ -549,12 +552,14 @@ def get_messages(conv_id: str) -> list[dict[str, Any]]:
                 sources = json.loads(row["sources_json"])
             except json.JSONDecodeError:
                 pass
-        result.append({
-            "role": row["role"],
-            "content": row["content"],
-            "sources": sources,
-            "created_at": row["created_at"],
-        })
+        result.append(
+            {
+                "role": row["role"],
+                "content": row["content"],
+                "sources": sources,
+                "created_at": row["created_at"],
+            }
+        )
     return result
 
 

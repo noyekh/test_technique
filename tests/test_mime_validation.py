@@ -67,6 +67,7 @@ def test_detect_mime_returns_none_when_import_fails():
 
         # Reimport to clear any cached reference
         from backend import mime_validation
+
         importlib.reload(mime_validation)
 
         # Now detect_mime should return None (import will raise)
@@ -81,6 +82,7 @@ def test_detect_mime_returns_none_when_import_fails():
 
         # Reload to restore normal behavior
         from backend import mime_validation
+
         importlib.reload(mime_validation)
 
 

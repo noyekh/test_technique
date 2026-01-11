@@ -33,6 +33,7 @@ from backend.citation_verifier import (
 @dataclass
 class FakeDoc:
     """Fake document for testing."""
+
     page_content: str
     metadata: dict[str, Any]
 
@@ -123,6 +124,7 @@ def test_compute_similarity_different():
 
 def test_compute_similarity_empty():
     """Test similarity with empty text returns 0."""
+
     def zero_embed(text: str) -> list[float]:
         if not text:
             return [0.0] * 16
@@ -134,6 +136,7 @@ def test_compute_similarity_empty():
 
 def test_compute_similarity_exception_returns_zero():
     """Test that exceptions return 0.0."""
+
     def failing_embed(text: str) -> list[float]:
         raise ValueError("Embedding failed")
 
@@ -260,9 +263,7 @@ def test_verify_citation_semantic_threshold():
     source = "text"
 
     # Low threshold should pass
-    is_valid_low, _, _ = verify_citation_semantic(
-        claim, source, fake_embed_fn, threshold=0.1
-    )
+    is_valid_low, _, _ = verify_citation_semantic(claim, source, fake_embed_fn, threshold=0.1)
     assert is_valid_low is True
 
 
@@ -391,9 +392,7 @@ def test_filter_ungrounded_claims_presence_mode():
         "Conditions générales de vente.",
     ]
 
-    verified = filter_ungrounded_claims(
-        answer, sources_meta, source_texts, embed_fn=None
-    )
+    verified = filter_ungrounded_claims(answer, sources_meta, source_texts, embed_fn=None)
 
     # Should use presence level without embed_fn
     assert isinstance(verified, str)
@@ -405,9 +404,7 @@ def test_filter_ungrounded_claims_semantic_mode():
     sources_meta = [{"source": "doc.txt"}]
     source_texts = ["Test content in document."]
 
-    verified = filter_ungrounded_claims(
-        answer, sources_meta, source_texts, embed_fn=fake_embed_fn
-    )
+    verified = filter_ungrounded_claims(answer, sources_meta, source_texts, embed_fn=fake_embed_fn)
 
     # Should use semantic level with embed_fn
     assert isinstance(verified, str)

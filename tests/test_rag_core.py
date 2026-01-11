@@ -141,7 +141,13 @@ def fake_llm_stream_valid(messages: list[dict[str, str]]) -> Iterator[str]:
 def test_format_sources_single():
     """Test formatting a single source."""
     docs = [
-        (FakeDoc(page_content="Content here", metadata={"source": "doc.txt", "chunk_index": 0, "doc_id": "abc"}), 0.85)
+        (
+            FakeDoc(
+                page_content="Content here",
+                metadata={"source": "doc.txt", "chunk_index": 0, "doc_id": "abc"},
+            ),
+            0.85,
+        )
     ]
     context, meta = format_sources(docs)
     assert "SOURCE 1" in context
@@ -154,8 +160,18 @@ def test_format_sources_single():
 def test_format_sources_multiple():
     """Test formatting multiple sources."""
     docs = [
-        (FakeDoc(page_content="First", metadata={"source": "a.txt", "chunk_index": 0, "doc_id": "a"}), 0.9),
-        (FakeDoc(page_content="Second", metadata={"source": "b.txt", "chunk_index": 1, "doc_id": "b"}), 0.8),
+        (
+            FakeDoc(
+                page_content="First", metadata={"source": "a.txt", "chunk_index": 0, "doc_id": "a"}
+            ),
+            0.9,
+        ),
+        (
+            FakeDoc(
+                page_content="Second", metadata={"source": "b.txt", "chunk_index": 1, "doc_id": "b"}
+            ),
+            0.8,
+        ),
     ]
     context, meta = format_sources(docs)
     assert "SOURCE 1" in context
@@ -256,18 +272,14 @@ def test_answer_question_empty_question():
 def test_answer_question_low_relevance():
     """Test refusal when documents have low relevance."""
     cfg = RagConfig(min_relevance=0.35)
-    ans, sources = answer_question(
-        "test", fake_retriever_low_score, fake_llm_structured_valid, cfg
-    )
+    ans, sources = answer_question("test", fake_retriever_low_score, fake_llm_structured_valid, cfg)
     assert ans == refusal()
 
 
 def test_answer_question_no_documents():
     """Test refusal when no documents are retrieved."""
     cfg = RagConfig(min_relevance=0.35)
-    ans, sources = answer_question(
-        "test", fake_retriever_empty, fake_llm_structured_valid, cfg
-    )
+    ans, sources = answer_question("test", fake_retriever_empty, fake_llm_structured_valid, cfg)
     assert ans == refusal()
 
 
@@ -398,10 +410,13 @@ def test_injection_content_marked_as_source():
 def test_context_includes_doc_ids():
     """Test that context includes doc_ids for audit trail."""
     docs = [
-        (FakeDoc(
-            page_content="Content",
-            metadata={"source": "file.txt", "chunk_index": 0, "doc_id": "unique_id_123"}
-        ), 0.9)
+        (
+            FakeDoc(
+                page_content="Content",
+                metadata={"source": "file.txt", "chunk_index": 0, "doc_id": "unique_id_123"},
+            ),
+            0.9,
+        )
     ]
     context, meta = format_sources(docs)
 

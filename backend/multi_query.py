@@ -155,9 +155,7 @@ def deduplicate_documents(
     # Sort by score descending
     result = sorted(seen.values(), key=lambda x: x[1], reverse=True)
 
-    logger.debug(
-        f"Deduplicated {len(docs_with_scores)} -> {len(result)} documents"
-    )
+    logger.debug(f"Deduplicated {len(docs_with_scores)} -> {len(result)} documents")
 
     return result
 

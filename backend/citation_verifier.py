@@ -96,12 +96,15 @@ def extract_citations(answer_text: str) -> list[tuple[str, int]]:
         end = match.end()
 
         # Find sentence start (last .!? before citation, or start of text)
-        sentence_start = max(
-            answer_text.rfind(".", 0, start),
-            answer_text.rfind("!", 0, start),
-            answer_text.rfind("?", 0, start),
-            -1,
-        ) + 1
+        sentence_start = (
+            max(
+                answer_text.rfind(".", 0, start),
+                answer_text.rfind("!", 0, start),
+                answer_text.rfind("?", 0, start),
+                -1,
+            )
+            + 1
+        )
 
         # Find sentence end (next .!? after citation, or end of text)
         sentence_end = len(answer_text)
@@ -297,9 +300,7 @@ def verify_answer(
 
         # Presence check
         if verification_level in ("presence", "semantic"):
-            is_valid, reason = verify_citation_presence(
-                sentence, source_text, min_overlap_words
-            )
+            is_valid, reason = verify_citation_presence(sentence, source_text, min_overlap_words)
             if not is_valid:
                 checks.append(
                     CitationCheck(

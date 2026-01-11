@@ -117,9 +117,16 @@ def run_benchmark(queries: list[str], num_runs: int = 3) -> dict:
             "min_latency_ms": min(latencies),
             "max_latency_ms": max(latencies),
             "p50_latency_ms": int(sorted(latencies)[len(latencies) // 2]),
-            "p95_latency_ms": int(sorted(latencies)[int(len(latencies) * 0.95)]) if len(latencies) >= 20 else max(latencies),
-            "answer_rate": results["answers"] / (results["answers"] + results["refusals"]) if (results["answers"] + results["refusals"]) > 0 else 0,
-            "avg_sources_per_answer": sum(results["sources_per_answer"]) / len(results["sources_per_answer"]) if results["sources_per_answer"] else 0,
+            "p95_latency_ms": int(sorted(latencies)[int(len(latencies) * 0.95)])
+            if len(latencies) >= 20
+            else max(latencies),
+            "answer_rate": results["answers"] / (results["answers"] + results["refusals"])
+            if (results["answers"] + results["refusals"]) > 0
+            else 0,
+            "avg_sources_per_answer": sum(results["sources_per_answer"])
+            / len(results["sources_per_answer"])
+            if results["sources_per_answer"]
+            else 0,
         }
 
     return results
@@ -139,11 +146,11 @@ def print_summary(results: dict) -> None:
     print(f"""
 | Métrique | Valeur |
 |----------|--------|
-| Latence moyenne | {s['avg_latency_ms']}ms |
-| Latence P50 | {s['p50_latency_ms']}ms |
-| Latence P95 | {s['p95_latency_ms']}ms |
-| Taux de réponse | {s['answer_rate']*100:.0f}% |
-| Sources/réponse | {s['avg_sources_per_answer']:.1f} |
+| Latence moyenne | {s["avg_latency_ms"]}ms |
+| Latence P50 | {s["p50_latency_ms"]}ms |
+| Latence P95 | {s["p95_latency_ms"]}ms |
+| Taux de réponse | {s["answer_rate"] * 100:.0f}% |
+| Sources/réponse | {s["avg_sources_per_answer"]:.1f} |
 """)
     print("=" * 60)
 
@@ -158,7 +165,7 @@ def print_summary(results: dict) -> None:
     print("|----------|--------|")
     print(f"| Latence moyenne | ~{round(s['avg_latency_ms'], -2)}ms |")
     print(f"| Latence P50 | {s['p50_latency_ms']}ms |")
-    print(f"| Taux de réponse | {s['answer_rate']*100:.0f}% |")
+    print(f"| Taux de réponse | {s['answer_rate'] * 100:.0f}% |")
     print(f"| Sources citées/réponse | {s['avg_sources_per_answer']:.1f} |")
     print("```")
 

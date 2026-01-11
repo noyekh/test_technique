@@ -18,9 +18,7 @@ def test_allows_first_request():
     """Test that first request is always allowed."""
     session = {}
 
-    allowed, retry_after = check_rate_limit(
-        session, key="test", max_requests=5, window_seconds=60
-    )
+    allowed, retry_after = check_rate_limit(session, key="test", max_requests=5, window_seconds=60)
 
     assert allowed is True
     assert retry_after == 0
@@ -31,10 +29,8 @@ def test_allows_requests_under_limit():
     session = {}
 
     for i in range(5):
-        allowed, _ = check_rate_limit(
-            session, key="test", max_requests=5, window_seconds=60
-        )
-        assert allowed is True, f"Request {i+1} should be allowed"
+        allowed, _ = check_rate_limit(session, key="test", max_requests=5, window_seconds=60)
+        assert allowed is True, f"Request {i + 1} should be allowed"
 
 
 def test_blocks_requests_over_limit():
@@ -46,9 +42,7 @@ def test_blocks_requests_over_limit():
         check_rate_limit(session, key="test", max_requests=5, window_seconds=60)
 
     # Next request should be blocked
-    allowed, retry_after = check_rate_limit(
-        session, key="test", max_requests=5, window_seconds=60
-    )
+    allowed, retry_after = check_rate_limit(session, key="test", max_requests=5, window_seconds=60)
 
     assert allowed is False
     assert retry_after > 0
@@ -62,9 +56,7 @@ def test_retry_after_is_positive():
     for _ in range(3):
         check_rate_limit(session, key="test", max_requests=3, window_seconds=60)
 
-    _, retry_after = check_rate_limit(
-        session, key="test", max_requests=3, window_seconds=60
-    )
+    _, retry_after = check_rate_limit(session, key="test", max_requests=3, window_seconds=60)
 
     assert retry_after >= 1
 
@@ -78,18 +70,14 @@ def test_window_expiration_allows_new_requests():
         check_rate_limit(session, key="test", max_requests=2, window_seconds=1)
 
     # Should be blocked now
-    allowed, _ = check_rate_limit(
-        session, key="test", max_requests=2, window_seconds=1
-    )
+    allowed, _ = check_rate_limit(session, key="test", max_requests=2, window_seconds=1)
     assert allowed is False
 
     # Wait for window to expire
     time.sleep(1.1)
 
     # Should be allowed again
-    allowed, _ = check_rate_limit(
-        session, key="test", max_requests=2, window_seconds=1
-    )
+    allowed, _ = check_rate_limit(session, key="test", max_requests=2, window_seconds=1)
     assert allowed is True
 
 
@@ -132,15 +120,11 @@ def test_independent_keys():
         check_rate_limit(session, key="a", max_requests=3, window_seconds=60)
 
     # Key "a" should be blocked
-    allowed_a, _ = check_rate_limit(
-        session, key="a", max_requests=3, window_seconds=60
-    )
+    allowed_a, _ = check_rate_limit(session, key="a", max_requests=3, window_seconds=60)
     assert allowed_a is False
 
     # Key "b" should still be allowed
-    allowed_b, _ = check_rate_limit(
-        session, key="b", max_requests=3, window_seconds=60
-    )
+    allowed_b, _ = check_rate_limit(session, key="b", max_requests=3, window_seconds=60)
     assert allowed_b is True
 
 
@@ -154,15 +138,11 @@ def test_independent_sessions():
         check_rate_limit(session1, key="test", max_requests=3, window_seconds=60)
 
     # Session 1 should be blocked
-    allowed1, _ = check_rate_limit(
-        session1, key="test", max_requests=3, window_seconds=60
-    )
+    allowed1, _ = check_rate_limit(session1, key="test", max_requests=3, window_seconds=60)
     assert allowed1 is False
 
     # Session 2 should still be allowed
-    allowed2, _ = check_rate_limit(
-        session2, key="test", max_requests=3, window_seconds=60
-    )
+    allowed2, _ = check_rate_limit(session2, key="test", max_requests=3, window_seconds=60)
     assert allowed2 is True
 
 
@@ -180,9 +160,7 @@ def test_zero_max_requests_blocks_all():
     """Test edge case where max_requests is 0."""
     session = {}
 
-    allowed, _ = check_rate_limit(
-        session, key="test", max_requests=0, window_seconds=60
-    )
+    allowed, _ = check_rate_limit(session, key="test", max_requests=0, window_seconds=60)
 
     assert allowed is False
 
@@ -192,9 +170,7 @@ def test_large_max_requests():
     session = {}
 
     for _i in range(100):
-        allowed, _ = check_rate_limit(
-            session, key="test", max_requests=1000, window_seconds=60
-        )
+        allowed, _ = check_rate_limit(session, key="test", max_requests=1000, window_seconds=60)
         assert allowed is True
 
 
@@ -204,13 +180,9 @@ def test_exact_limit_boundary():
 
     # Make exactly max_requests requests
     for i in range(10):
-        allowed, _ = check_rate_limit(
-            session, key="test", max_requests=10, window_seconds=60
-        )
-        assert allowed is True, f"Request {i+1} of 10 should be allowed"
+        allowed, _ = check_rate_limit(session, key="test", max_requests=10, window_seconds=60)
+        assert allowed is True, f"Request {i + 1} of 10 should be allowed"
 
     # The 11th request should be blocked
-    allowed, _ = check_rate_limit(
-        session, key="test", max_requests=10, window_seconds=60
-    )
+    allowed, _ = check_rate_limit(session, key="test", max_requests=10, window_seconds=60)
     assert allowed is False

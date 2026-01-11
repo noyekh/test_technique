@@ -25,6 +25,7 @@ from backend.multi_query import (
 @dataclass
 class FakeDoc:
     """Fake document for testing."""
+
     page_content: str
     metadata: dict[str, Any]
 
@@ -146,6 +147,7 @@ def test_generate_query_variants_llm_failure():
 
 def test_generate_query_variants_strips_whitespace():
     """Test that variants are stripped of whitespace."""
+
     def llm_with_whitespace(prompt: str) -> list[str]:
         return ["  variant with spaces  ", "\nvariant with newlines\n"]
 
@@ -283,6 +285,7 @@ def test_expand_and_retrieve_empty_question():
 
 def test_expand_and_retrieve_deduplicates():
     """Test that results are deduplicated."""
+
     def retriever_with_duplicates(query: str, k: int) -> list[tuple[FakeDoc, float]]:
         # Always return same document
         return [(FakeDoc(page_content="Same doc", metadata={}), 0.9)]
@@ -302,6 +305,7 @@ def test_expand_and_retrieve_deduplicates():
 
 def test_expand_and_retrieve_fallback_on_error():
     """Test fallback to single query on error."""
+
     def failing_llm(prompt: str) -> list[str]:
         raise ValueError("LLM failed")
 

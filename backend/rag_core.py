@@ -52,8 +52,7 @@ LLMInvokeFn = Callable[[list[dict[str, str]]], tuple[str, list[int]]]
 LLMStreamFn = Callable[[list[dict[str, str]]], Iterator[str]]
 # v1.9: Citation verification function type
 CitationVerifyFn = Callable[
-    [str, list[dict[str, Any]], list[str], str, float, int],
-    str
+    [str, list[dict[str, Any]], list[str], str, float, int], str
 ]  # (answer, sources_meta, source_texts, level, threshold, min_words) -> verified_answer
 
 
@@ -125,8 +124,7 @@ def format_sources(
         chunk = doc.metadata.get("chunk_index", 0)
         doc_id = doc.metadata.get("doc_id", "unknown")
         blocks.append(
-            f"SOURCE {idx} (score={score:.3f}, doc_id={doc_id}, chunk={chunk}):\n"
-            f"{doc.page_content}"
+            f"SOURCE {idx} (score={score:.3f}, doc_id={doc_id}, chunk={chunk}):\n{doc.page_content}"
         )
         meta.append(
             {

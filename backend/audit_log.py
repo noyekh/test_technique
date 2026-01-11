@@ -56,6 +56,7 @@ class AuditEvent:
     All fields are either identifiers, numeric values, or controlled enums.
     No free-text content is allowed.
     """
+
     event_type: Literal["query", "upload", "delete", "refusal", "error", "auth"]
     request_id: str
     timestamp: str
